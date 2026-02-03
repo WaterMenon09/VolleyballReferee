@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1a1a2e">
     <title>Volleyball Referee</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -71,6 +75,48 @@
             <button id="startMatch" class="btn btn-primary">Start Match</button>
         </div>
 
+        <div id="rotationSetup" class="rotation-setup hidden">
+            <h2>Set Starting Rotations</h2>
+            <div id="rotationSetupSetScore" class="rotation-setup-score hidden"></div>
+            <p class="rotation-setup-hint">Click on each position to assign a player. Libero is not available for starting rotation.</p>
+            <div class="rotation-setup-container">
+                <div class="rotation-setup-team">
+                    <h3 id="rotationTeam1Name">Team A</h3>
+                    <div class="rotation-setup-grid" id="rotationSetup1">
+                        <div class="rotation-setup-row">
+                            <span class="rotation-setup-pos" data-team="1" data-pos="4">4</span>
+                            <span class="rotation-setup-pos" data-team="1" data-pos="3">3</span>
+                            <span class="rotation-setup-pos" data-team="1" data-pos="2">2</span>
+                        </div>
+                        <div class="rotation-setup-row">
+                            <span class="rotation-setup-pos" data-team="1" data-pos="5">5</span>
+                            <span class="rotation-setup-pos" data-team="1" data-pos="6">6</span>
+                            <span class="rotation-setup-pos" data-team="1" data-pos="1">1</span>
+                        </div>
+                    </div>
+                    <div class="available-players" id="availablePlayers1"></div>
+                </div>
+                <div class="rotation-setup-team">
+                    <h3 id="rotationTeam2Name">Team B</h3>
+                    <div class="rotation-setup-grid" id="rotationSetup2">
+                        <div class="rotation-setup-row">
+                            <span class="rotation-setup-pos" data-team="2" data-pos="4">4</span>
+                            <span class="rotation-setup-pos" data-team="2" data-pos="3">3</span>
+                            <span class="rotation-setup-pos" data-team="2" data-pos="2">2</span>
+                        </div>
+                        <div class="rotation-setup-row">
+                            <span class="rotation-setup-pos" data-team="2" data-pos="5">5</span>
+                            <span class="rotation-setup-pos" data-team="2" data-pos="6">6</span>
+                            <span class="rotation-setup-pos" data-team="2" data-pos="1">1</span>
+                        </div>
+                    </div>
+                    <div class="available-players" id="availablePlayers2"></div>
+                </div>
+            </div>
+            <div id="rotationSetupError" class="setup-error hidden"></div>
+            <button id="confirmRotation" class="btn btn-primary">Start Match</button>
+        </div>
+
         <div id="scoreboard" class="scoreboard hidden">
             <div class="match-info">
                 <span id="matchTypeDisplay"></span>
@@ -90,11 +136,26 @@
                             <span class="timeout-dot active"></span>
                         </div>
                     </div>
+                    <div class="rotation-grid" id="rotation1">
+                        <div class="rotation-row front-row">
+                            <div class="rotation-pos" data-team="1" data-pos="4"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="1" data-pos="3"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="1" data-pos="2"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                        </div>
+                        <div class="rotation-row back-row">
+                            <div class="rotation-pos" data-team="1" data-pos="5"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="1" data-pos="6"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="1" data-pos="1"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                        </div>
+                    </div>
                     <div class="score" id="team1Score">0</div>
                     <button class="btn btn-score" data-team="1">+1 Point</button>
                 </div>
 
                 <div class="vs-container">
+                    <div class="undo-btn" id="undoPoint" title="Undo last point">
+                        <img src="icons/undo.png" alt="Undo" class="undo-icon">
+                    </div>
                     <div class="swap-teams" id="swapTeams" title="Swap teams">
                         <img src="icons/swap.png" alt="Swap teams" class="swap-icon">
                     </div>
@@ -114,6 +175,18 @@
                         <div class="timeout-dots" id="timeoutDots2">
                             <span class="timeout-dot active"></span>
                             <span class="timeout-dot active"></span>
+                        </div>
+                    </div>
+                    <div class="rotation-grid" id="rotation2">
+                        <div class="rotation-row front-row">
+                            <div class="rotation-pos" data-team="2" data-pos="4"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="2" data-pos="3"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="2" data-pos="2"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                        </div>
+                        <div class="rotation-row back-row">
+                            <div class="rotation-pos" data-team="2" data-pos="5"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="2" data-pos="6"><span class="player-num"></span><span class="sub-indicator"></span></div>
+                            <div class="rotation-pos" data-team="2" data-pos="1"><span class="player-num"></span><span class="sub-indicator"></span></div>
                         </div>
                     </div>
                     <div class="score" id="team2Score">0</div>
@@ -137,7 +210,6 @@
 
             
             <div class="controls">
-                <button id="undoPoint" class="btn btn-secondary">Undo Last Point</button>
                 <button id="newMatch" class="btn btn-danger">New Match</button>
             </div>
         </div>
@@ -147,6 +219,15 @@
             <div id="winner" class="winner"></div>
             <div id="finalScore" class="final-score"></div>
             <button id="playAgain" class="btn btn-primary">Play Again</button>
+        </div>
+    </div>
+
+    <div id="subModal" class="modal hidden">
+        <div class="modal-content sub-modal-content">
+            <h2>Substitute Player</h2>
+            <p id="subCurrentPlayer"></p>
+            <div class="sub-options" id="subOptions"></div>
+            <button class="btn btn-secondary" id="cancelSub">Cancel</button>
         </div>
     </div>
 
@@ -163,6 +244,8 @@
             <button class="btn btn-primary" id="continueEarly">Continue</button>
         </div>
     </div>
+
+    <footer class="credits">v1.6 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
 </body>
