@@ -2,6 +2,10 @@
 
 A comprehensive web-based volleyball scoresheet application for tracking matches, rotations, substitutions, and more. Works seamlessly on desktop and mobile browsers.
 
+## Live Demo
+
+**[https://watermenon09.github.io/VolleyballReferee/](https://watermenon09.github.io/VolleyballReferee/)**
+
 ## Features
 
 ### Match Setup
@@ -54,7 +58,7 @@ No installation required! Simply open `index.html` in any modern web browser.
 ### For Local Development
 
 ```bash
-git clone https://github.com/yourusername/VolleyballReferee.git
+git clone https://github.com/watermenon09/VolleyballReferee.git
 cd VolleyballReferee
 # Open index.html in your browser
 ```
@@ -109,6 +113,7 @@ The app is fully responsive and optimized for:
 
 ## Version History
 
+- **v1.7** - Added live demo link and GitHub Actions deployment
 - **v1.5** - Added README and deployment documentation
 - **v1.4** - Mobile responsiveness, substitution system, rotation management
 - **v1.3** - Added timeout timer with countdown
