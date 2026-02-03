@@ -319,6 +319,21 @@ function checkLiberoFrontRow(team) {
     });
 }
 
+function switchSides() {
+    [state.team1Name, state.team2Name] = [state.team2Name, state.team1Name];
+    [state.team1Sets, state.team2Sets] = [state.team2Sets, state.team1Sets];
+    [state.team1Players, state.team2Players] = [state.team2Players, state.team1Players];
+    [state.team1Captain, state.team2Captain] = [state.team2Captain, state.team1Captain];
+    [state.team1Libero, state.team2Libero] = [state.team2Libero, state.team1Libero];
+
+    state.setHistory = state.setHistory.map(set => ({
+        ...set,
+        winner: set.winner === 1 ? 2 : 1,
+        team1Score: set.team2Score,
+        team2Score: set.team1Score
+    }));
+}
+
 function swapTeams() {
     [state.team1Name, state.team2Name] = [state.team2Name, state.team1Name];
     [state.team1Score, state.team2Score] = [state.team2Score, state.team1Score];
@@ -781,8 +796,12 @@ function checkSetWin() {
             state.serving = (state.currentSet % 2 === 1) ? 1 : 2;
             state.firstServer = state.serving;
 
+            switchSides();
+
             if (state.hasRotation) {
                 showNewSetRotationSetup();
+            } else {
+                updateDisplay();
             }
         }
     }
