@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volleyball Referee</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Volleyball Referee</h1>
+
+        <div id="setup" class="setup-panel">
+            <h2>Match Setup</h2>
+            <div class="team-names">
+                <div class="team-input">
+                    <label for="team1Name">Team 1 Name:</label>
+                    <input type="text" id="team1Name" value="Team A">
+                </div>
+                <div class="team-input">
+                    <label for="team2Name">Team 2 Name:</label>
+                    <input type="text" id="team2Name" value="Team B">
+                </div>
+            </div>
+            <div class="match-type">
+                <label>Match Type:</label>
+                <div class="radio-group">
+                    <label>
+                        <input type="radio" name="matchType" value="3" checked> Best of 3 Sets
+                    </label>
+                    <label>
+                        <input type="radio" name="matchType" value="5"> Best of 5 Sets
+                    </label>
+                </div>
+            </div>
+            <button id="startMatch" class="btn btn-primary">Start Match</button>
+        </div>
+
+        <div id="scoreboard" class="scoreboard hidden">
+            <div class="match-info">
+                <span id="matchTypeDisplay"></span>
+                <span id="currentSetDisplay"></span>
+            </div>
+
+            
+            <div class="current-set">
+                <div class="team team1">
+                    <div class="team-name" id="team1Display">Team A</div>
+                    <div class="timeout-container">
+                        <button class="timeout-btn" id="timeout1" data-team="1" title="Call timeout">
+                            <img src="icons/timer.png" alt="Timeout" class="timeout-icon">
+                        </button>
+                        <div class="timeout-dots" id="timeoutDots1">
+                            <span class="timeout-dot active"></span>
+                            <span class="timeout-dot active"></span>
+                        </div>
+                    </div>
+                    <div class="score" id="team1Score">0</div>
+                    <button class="btn btn-score" data-team="1">+1 Point</button>
+                </div>
+
+                <div class="vs-container">
+                    <div class="swap-teams" id="swapTeams" title="Swap teams">
+                        <img src="icons/swap.png" alt="Swap teams" class="swap-icon">
+                    </div>
+                    <div class="serve-indicator" id="serveIndicator" title="Click to switch service">
+                        <img src="icons/volleyball.png" alt="Service" class="serve-ball" id="serveBall">
+                    </div>
+                    <div class="vs">VS</div>
+                    <div class="sets-score-center" id="setsScoreCenter"></div>
+                </div>
+
+                <div class="team team2">
+                    <div class="team-name" id="team2Display">Team B</div>
+                    <div class="timeout-container">
+                        <button class="timeout-btn" id="timeout2" data-team="2" title="Call timeout">
+                            <img src="icons/timer.png" alt="Timeout" class="timeout-icon">
+                        </button>
+                        <div class="timeout-dots" id="timeoutDots2">
+                            <span class="timeout-dot active"></span>
+                            <span class="timeout-dot active"></span>
+                        </div>
+                    </div>
+                    <div class="score" id="team2Score">0</div>
+                    <button class="btn btn-score" data-team="2">+1 Point</button>
+                </div>
+            </div>
+
+            <div class="point-timeline">
+                <h3>Set <span id="timelineSetNumber">1</span> Scoring</h3>
+                <div class="timeline-container">
+                    <div class="timeline-team">
+                        <span class="timeline-label" id="timelineTeam1Label"></span>
+                        <div class="timeline-row" id="team1Timeline"></div>
+                    </div>
+                    <div class="timeline-team">
+                        <span class="timeline-label" id="timelineTeam2Label"></span>
+                        <div class="timeline-row" id="team2Timeline"></div>
+                    </div>
+                </div>
+            </div>
+
+            
+            <div class="controls">
+                <button id="undoPoint" class="btn btn-secondary">Undo Last Point</button>
+                <button id="newMatch" class="btn btn-danger">New Match</button>
+            </div>
+        </div>
+
+        <div id="matchResult" class="match-result hidden">
+            <h2>Match Complete!</h2>
+            <div id="winner" class="winner"></div>
+            <div id="finalScore" class="final-score"></div>
+            <button id="playAgain" class="btn btn-primary">Play Again</button>
+        </div>
+    </div>
+
+    <div id="timeoutModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="timeoutTeamName">Team Timeout</h2>
+            <div class="timer-display">
+                <svg class="timer-ring" viewBox="0 0 100 100">
+                    <circle class="timer-ring-bg" cx="50" cy="50" r="45"/>
+                    <circle class="timer-ring-progress" id="timerProgress" cx="50" cy="50" r="45"/>
+                </svg>
+                <span class="timer-text" id="timerText">30</span>
+            </div>
+            <button class="btn btn-primary" id="continueEarly">Continue</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
