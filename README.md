@@ -132,4 +132,4 @@ Created by **Menon Pranto**
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+ You can also open GitHub issues to suggest new features or report bugs.
