@@ -113,6 +113,7 @@ The app is fully responsive and optimized for:
 
 ## Version History
 
+- **v2.01** - Optimized landscape mode for mobile phones, reduced scrolling
 - **v1.7** - Added live demo link and GitHub Actions deployment
 - **v1.5** - Added README and deployment documentation
 - **v1.4** - Mobile responsiveness, substitution system, rotation management
