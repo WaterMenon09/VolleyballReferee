@@ -1,6 +1,12 @@
 const state = {
     team1Name: 'Team A',
     team2Name: 'Team B',
+    team1Players: [],
+    team2Players: [],
+    team1Captain: null,
+    team2Captain: null,
+    team1Libero: null,
+    team2Libero: null,
     matchType: 3,
     setsToWin: 2,
     currentSet: 1,
@@ -112,6 +118,9 @@ function swapTeams() {
     [state.team1Score, state.team2Score] = [state.team2Score, state.team1Score];
     [state.team1Sets, state.team2Sets] = [state.team2Sets, state.team1Sets];
     [state.team1Timeouts, state.team2Timeouts] = [state.team2Timeouts, state.team1Timeouts];
+    [state.team1Players, state.team2Players] = [state.team2Players, state.team1Players];
+    [state.team1Captain, state.team2Captain] = [state.team2Captain, state.team1Captain];
+    [state.team1Libero, state.team2Libero] = [state.team2Libero, state.team1Libero];
 
     state.serving = state.serving === 1 ? 2 : 1;
 
@@ -135,8 +144,40 @@ function swapTeams() {
 }
 
 function startMatch() {
-    state.team1Name = document.getElementById('team1Name').value || 'Team A';
-    state.team2Name = document.getElementById('team2Name').value || 'Team B';
+    const team1Name = document.getElementById('team1Name').value || 'Team A';
+    const team2Name = document.getElementById('team2Name').value || 'Team B';
+
+    const team1PlayersInput = document.getElementById('team1Players').value;
+    const team2PlayersInput = document.getElementById('team2Players').value;
+    const team1Players = team1PlayersInput ? team1PlayersInput.split(',').map(n => n.trim()).filter(n => n) : [];
+    const team2Players = team2PlayersInput ? team2PlayersInput.split(',').map(n => n.trim()).filter(n => n) : [];
+
+    const team1Captain = document.getElementById('team1Captain').value || null;
+    const team2Captain = document.getElementById('team2Captain').value || null;
+    const team1Libero = document.getElementById('team1Libero').value || null;
+    const team2Libero = document.getElementById('team2Libero').value || null;
+
+    const errors = validateSetup(team1Name, team2Name, team1Players, team2Players, team1Captain, team2Captain, team1Libero, team2Libero);
+
+    const errorDiv = document.getElementById('setupError');
+    if (errors.length > 0) {
+        errorDiv.innerHTML = '<strong>Please fix the following errors:</strong><ul>' +
+            errors.map(e => `<li>${e}</li>`).join('') + '</ul>';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    errorDiv.classList.add('hidden');
+
+    state.team1Name = team1Name;
+    state.team2Name = team2Name;
+    state.team1Players = team1Players;
+    state.team2Players = team2Players;
+    state.team1Captain = team1Captain;
+    state.team2Captain = team2Captain;
+    state.team1Libero = team1Libero;
+    state.team2Libero = team2Libero;
+
     state.matchType = parseInt(document.querySelector('input[name="matchType"]:checked').value);
     state.setsToWin = Math.ceil(state.matchType / 2);
 
@@ -147,6 +188,59 @@ function startMatch() {
     document.getElementById('matchResult').classList.add('hidden');
 
     updateDisplay();
+}
+
+function validateSetup(team1Name, team2Name, team1Players, team2Players, team1Captain, team2Captain, team1Libero, team2Libero) {
+    const errors = [];
+
+    const validateTeam = (teamName, players, captain, libero) => {
+        const invalidNumbers = players.filter(n => !isValidInteger(n));
+        if (invalidNumbers.length > 0) {
+            errors.push(`${teamName}: Invalid jersey number(s): ${invalidNumbers.join(', ')} (must be integers)`);
+        }
+
+        const validPlayers = players.filter(n => isValidInteger(n));
+
+        if (players.length > 0 && validPlayers.length < 6) {
+            errors.push(`${teamName}: At least 6 valid jersey numbers are required (found ${validPlayers.length})`);
+        }
+
+        if (captain) {
+            if (!isValidInteger(captain)) {
+                errors.push(`${teamName}: Captain number must be a valid integer`);
+            } else if (validPlayers.length > 0 && !validPlayers.includes(captain)) {
+                errors.push(`${teamName}: Captain #${captain} is not in the jersey numbers list`);
+            }
+        }
+
+        if (libero) {
+            if (!isValidInteger(libero)) {
+                errors.push(`${teamName}: Libero number must be a valid integer`);
+            } else if (validPlayers.length > 0 && !validPlayers.includes(libero)) {
+                errors.push(`${teamName}: Libero #${libero} is not in the jersey numbers list`);
+            }
+        }
+
+        if (captain && libero && captain === libero) {
+            errors.push(`${teamName}: Captain and Libero cannot be the same player`);
+        }
+    };
+
+    if (team1Players.length > 0 || team1Captain || team1Libero) {
+        validateTeam(team1Name, team1Players, team1Captain, team1Libero);
+    }
+
+    if (team2Players.length > 0 || team2Captain || team2Libero) {
+        validateTeam(team2Name, team2Players, team2Captain, team2Libero);
+    }
+
+    return errors;
+}
+
+function isValidInteger(value) {
+    if (value === null || value === '') return false;
+    const num = Number(value);
+    return Number.isInteger(num) && num > 0;
 }
 
 function resetMatchState() {

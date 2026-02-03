@@ -41,32 +41,112 @@ h1 {
     margin-bottom: 25px;
 }
 
-.team-names {
+.team-setup-container {
     display: flex;
     gap: 20px;
     margin-bottom: 25px;
     flex-wrap: wrap;
 }
 
-.team-input {
+.team-setup {
     flex: 1;
-    min-width: 200px;
+    min-width: 250px;
+    padding: 20px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.team1-setup {
+    border: 2px solid rgba(102, 126, 234, 0.5);
+}
+
+.team2-setup {
+    border: 2px solid rgba(245, 87, 108, 0.5);
+}
+
+.team-setup h3 {
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+.team1-setup h3 {
+    color: #667eea;
+}
+
+.team2-setup h3 {
+    color: #f5576c;
+}
+
+.team-input {
+    margin-bottom: 12px;
+}
+
+.team-input:last-child {
+    margin-bottom: 0;
 }
 
 .team-input label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-weight: 500;
+    font-size: 0.9rem;
 }
 
 .team-input input {
     width: 100%;
-    padding: 12px;
+    padding: 10px 12px;
     border: none;
     border-radius: 8px;
     font-size: 1rem;
     background: rgba(255, 255, 255, 0.9);
     color: #333;
+    box-sizing: border-box;
+}
+
+.team-input input::placeholder {
+    color: #999;
+}
+
+.team-input-row {
+    display: flex;
+    gap: 10px;
+}
+
+.team-input-row .team-input {
+    flex: 1;
+}
+
+.team-input input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+.team-input input[type="number"]::-webkit-outer-spin-button,
+.team-input input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.setup-error {
+    background: rgba(245, 87, 108, 0.2);
+    border: 1px solid #f5576c;
+    border-radius: 8px;
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    color: #f5576c;
+    font-size: 0.9rem;
+}
+
+.setup-error.hidden {
+    display: none;
+}
+
+.setup-error ul {
+    margin: 8px 0 0 20px;
+    padding: 0;
+}
+
+.setup-error li {
+    margin-bottom: 4px;
 }
 
 .match-type {
@@ -353,16 +433,21 @@ h1 {
 
 .swap-teams {
     cursor: pointer;
-    padding: 8px;
+    padding: 12px;
     border-radius: 50%;
-    transition: transform 0.3s, background 0.2s;
+    background: #fff;
+    transition: transform 0.2s, box-shadow 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 56px;
+    height: 56px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .swap-teams:hover {
-    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .swap-teams:active {
@@ -370,15 +455,8 @@ h1 {
 }
 
 .swap-icon {
-    width: 28px;
-    height: 28px;
-    filter: invert(1);
-    opacity: 0.8;
-    transition: opacity 0.2s;
-}
-
-.swap-teams:hover .swap-icon {
-    opacity: 1;
+    width: 32px;
+    height: 32px;
 }
 
 .vs {

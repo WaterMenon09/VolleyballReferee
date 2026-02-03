@@ -12,14 +12,48 @@
 
         <div id="setup" class="setup-panel">
             <h2>Match Setup</h2>
-            <div class="team-names">
-                <div class="team-input">
-                    <label for="team1Name">Team 1 Name:</label>
-                    <input type="text" id="team1Name" value="Team A">
+            <div class="team-setup-container">
+                <div class="team-setup team1-setup">
+                    <h3>Team 1</h3>
+                    <div class="team-input">
+                        <label for="team1Name">Team Name:</label>
+                        <input type="text" id="team1Name" value="Team A">
+                    </div>
+                    <div class="team-input">
+                        <label for="team1Players">Jersey Numbers (comma separated):</label>
+                        <input type="text" id="team1Players" placeholder="1, 2, 3, 4, 5, 6">
+                    </div>
+                    <div class="team-input-row">
+                        <div class="team-input">
+                            <label for="team1Captain">Captain #:</label>
+                            <input type="number" id="team1Captain" placeholder="Cap">
+                        </div>
+                        <div class="team-input">
+                            <label for="team1Libero">Libero #:</label>
+                            <input type="number" id="team1Libero" placeholder="Lib">
+                        </div>
+                    </div>
                 </div>
-                <div class="team-input">
-                    <label for="team2Name">Team 2 Name:</label>
-                    <input type="text" id="team2Name" value="Team B">
+                <div class="team-setup team2-setup">
+                    <h3>Team 2</h3>
+                    <div class="team-input">
+                        <label for="team2Name">Team Name:</label>
+                        <input type="text" id="team2Name" value="Team B">
+                    </div>
+                    <div class="team-input">
+                        <label for="team2Players">Jersey Numbers (comma separated):</label>
+                        <input type="text" id="team2Players" placeholder="1, 2, 3, 4, 5, 6">
+                    </div>
+                    <div class="team-input-row">
+                        <div class="team-input">
+                            <label for="team2Captain">Captain #:</label>
+                            <input type="number" id="team2Captain" placeholder="Cap">
+                        </div>
+                        <div class="team-input">
+                            <label for="team2Libero">Libero #:</label>
+                            <input type="number" id="team2Libero" placeholder="Lib">
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="match-type">
@@ -33,6 +67,7 @@
                     </label>
                 </div>
             </div>
+            <div id="setupError" class="setup-error hidden"></div>
             <button id="startMatch" class="btn btn-primary">Start Match</button>
         </div>
 
