@@ -43,8 +43,12 @@ const REGULAR_SET_POINTS = 25;
 const FINAL_SET_POINTS = 15;
 const MIN_LEAD = 2;
 const TIMEOUT_DURATION = 30;
+const SET_BREAK_DURATION = 180;
+const TIMER_CIRCLE_RADIUS = 45; // SVG circle radius from viewBox
+const TIMER_CIRCLE_CIRCUMFERENCE = 2 * Math.PI * TIMER_CIRCLE_RADIUS;
 
 let timeoutInterval = null;
+let setBreakInterval = null;
 
 function init() {
     document.getElementById('startMatch').addEventListener('click', startMatch);
@@ -65,6 +69,7 @@ function init() {
     document.getElementById('timeout1').addEventListener('click', () => useTimeout(1));
     document.getElementById('timeout2').addEventListener('click', () => useTimeout(2));
     document.getElementById('continueEarly').addEventListener('click', closeTimeoutModal);
+    document.getElementById('continueSetBreak').addEventListener('click', closeSetBreakModal);
     document.getElementById('confirmRotation').addEventListener('click', confirmRotationSetup);
     document.getElementById('cancelSub').addEventListener('click', closeSubModal);
 
@@ -135,10 +140,10 @@ function showTimeoutModal(teamName) {
     teamNameDisplay.textContent = `${teamName} Timeout`;
     modal.classList.remove('hidden');
 
-    let timeLeft = TIMEOUT_DURATION * 1000;
+    const timeoutDurationMs = TIMEOUT_DURATION * 1000;
+    let timeLeft = timeoutDurationMs;
     timerProgress.style.strokeDashoffset = 0;
 
-    const circumference = 283;
     const updateInterval = 10;
 
     timeoutInterval = setInterval(() => {
@@ -148,7 +153,7 @@ function showTimeoutModal(teamName) {
         const milliseconds = Math.floor((timeLeft % 1000) / 10);
         timerText.textContent = `${seconds}.${milliseconds.toString().padStart(2, '0')}`;
 
-        const offset = circumference * (1 - timeLeft / (TIMEOUT_DURATION * 1000));
+        const offset = TIMER_CIRCLE_CIRCUMFERENCE * (1 - timeLeft / timeoutDurationMs);
         timerProgress.style.strokeDashoffset = offset;
 
         if (timeLeft <= 0) {
@@ -165,6 +170,60 @@ function closeTimeoutModal() {
     if (timeoutInterval) {
         clearInterval(timeoutInterval);
         timeoutInterval = null;
+    }
+}
+
+function showSetBreakModal(setNumber) {
+    const modal = document.getElementById('setBreakModal');
+    const timerText = document.getElementById('setBreakText');
+    const timerProgress = document.getElementById('setBreakProgress');
+    const titleDisplay = document.getElementById('setBreakTitle');
+
+    titleDisplay.textContent = `Set ${setNumber - 1} Complete - Break Time`;
+    
+    // Hide scoreboard to prevent background visibility
+    document.getElementById('scoreboard').classList.add('hidden');
+    modal.classList.remove('hidden');
+
+    const setBreakDurationMs = SET_BREAK_DURATION * 1000;
+    let timeLeft = setBreakDurationMs;
+    timerProgress.style.strokeDashoffset = 0;
+
+    const updateInterval = 100; // Update every 100ms for second-level precision
+
+    setBreakInterval = setInterval(() => {
+        timeLeft -= updateInterval;
+
+        // Format as mm:ss
+        const totalSeconds = Math.floor(timeLeft / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        timerText.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        const offset = TIMER_CIRCLE_CIRCUMFERENCE * (1 - timeLeft / setBreakDurationMs);
+        timerProgress.style.strokeDashoffset = offset;
+
+        if (timeLeft <= 0) {
+            timerText.textContent = '0:00';
+            closeSetBreakModal();
+        }
+    }, updateInterval);
+}
+
+function closeSetBreakModal() {
+    const modal = document.getElementById('setBreakModal');
+    modal.classList.add('hidden');
+
+    if (setBreakInterval) {
+        clearInterval(setBreakInterval);
+        setBreakInterval = null;
+    }
+
+    if (state.hasRotation) {
+        showNewSetRotationSetup();
+    } else {
+        document.getElementById('scoreboard').classList.remove('hidden');
+        updateDisplay();
     }
 }
 
@@ -820,11 +879,7 @@ function checkSetWin() {
 
             switchSides();
 
-            if (state.hasRotation) {
-                showNewSetRotationSetup();
-            } else {
-                updateDisplay();
-            }
+            showSetBreakModal(state.currentSet);
         }
     }
 }
