@@ -333,6 +333,7 @@ function switchSides() {
     [state.team1Players, state.team2Players] = [state.team2Players, state.team1Players];
     [state.team1Captain, state.team2Captain] = [state.team2Captain, state.team1Captain];
     [state.team1Libero, state.team2Libero] = [state.team2Libero, state.team1Libero];
+    [state.team1OriginalId, state.team2OriginalId] = [state.team2OriginalId, state.team1OriginalId];
 
     state.setHistory = state.setHistory.map(set => ({
         ...set,
