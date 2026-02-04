@@ -230,7 +230,7 @@ function showSubModal(team, position) {
         if (player === libero) return;
 
         // Skip if already added as return player for current position
-        if (subs[rotationIndex] && player === subs[rotationIndex].original && currentPlayer !== subs[rotationIndex].original) {
+        if (subs[rotationIndex] && player === subs[rotationIndex].original) {
             return;
         }
 
