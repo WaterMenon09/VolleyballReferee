@@ -26,7 +26,7 @@ body {
 .container {
     width: 100%;
     min-height: 100vh;
-    min-height: -webkit-fill-available;
+    min-height: -webkit-fill-available; /* iOS Safari viewport height fix */
     padding: 15px;
     padding-bottom: 50px;
     display: flex;
@@ -272,7 +272,7 @@ h1 {
 .current-set {
     display: flex;
     justify-content: space-around;
-    align-items: stretch;
+    align-items: stretch; /* Stretch to fill available height for full-screen layout */
     gap: 20px;
     margin-bottom: 30px;
     flex: 1;
