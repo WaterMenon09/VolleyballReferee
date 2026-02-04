@@ -189,7 +189,7 @@ function showSetBreakModal(setNumber) {
     let timeLeft = setBreakDurationMs;
     timerProgress.style.strokeDashoffset = 0;
 
-    const updateInterval = 100; // Update every 100ms for smoother display
+    const updateInterval = 100; // Update every 100ms for second-level precision
 
     setBreakInterval = setInterval(() => {
         timeLeft -= updateInterval;
