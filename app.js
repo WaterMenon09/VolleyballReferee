@@ -229,6 +229,11 @@ function showSubModal(team, position) {
     availableSubs.forEach(player => {
         if (player === libero) return;
 
+        // Skip if already added as return player for current position
+        if (subs[rotationIndex] && player === subs[rotationIndex].original && currentPlayer !== subs[rotationIndex].original) {
+            return;
+        }
+
         const subEntry = Object.entries(subs).find(([idx, sub]) => sub.original === player);
         if (subEntry) {
             const [subIdx] = subEntry;
