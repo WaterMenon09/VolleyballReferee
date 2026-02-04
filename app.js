@@ -35,7 +35,8 @@ const rotationSetupState = {
     team1Rotation: { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     team2Rotation: { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     selectedPosition: null,
-    selectedTeam: null
+    selectedTeam: null,
+    isNewSet: false
 };
 
 const REGULAR_SET_POINTS = 25;
@@ -491,6 +492,7 @@ function showRotationSetup() {
     rotationSetupState.team2Rotation = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
     rotationSetupState.selectedPosition = null;
     rotationSetupState.selectedTeam = null;
+    rotationSetupState.isNewSet = false;
 
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
@@ -513,6 +515,7 @@ function showNewSetRotationSetup() {
     rotationSetupState.team2Rotation = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
     rotationSetupState.selectedPosition = null;
     rotationSetupState.selectedTeam = null;
+    rotationSetupState.isNewSet = true;
 
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
@@ -656,7 +659,17 @@ function confirmRotationSetup() {
     ];
 
     document.getElementById('rotationSetup').classList.add('hidden');
-    beginMatch();
+    
+    if (rotationSetupState.isNewSet) {
+        // Continue existing match with new set rotations
+        // Don't call beginMatch() as it would reset match state
+        // Just show scoreboard and update display with new rotations
+        document.getElementById('scoreboard').classList.remove('hidden');
+        updateDisplay();
+    } else {
+        // Start a new match - this will reset state and set up all UI elements
+        beginMatch();
+    }
 }
 
 function beginMatch() {
