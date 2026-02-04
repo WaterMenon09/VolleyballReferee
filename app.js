@@ -180,26 +180,31 @@ function showSetBreakModal(setNumber) {
     const titleDisplay = document.getElementById('setBreakTitle');
 
     titleDisplay.textContent = `Set ${setNumber - 1} Complete - Break Time`;
+    
+    // Hide scoreboard to prevent background visibility
+    document.getElementById('scoreboard').classList.add('hidden');
     modal.classList.remove('hidden');
 
     const setBreakDurationMs = SET_BREAK_DURATION * 1000;
     let timeLeft = setBreakDurationMs;
     timerProgress.style.strokeDashoffset = 0;
 
-    const updateInterval = 10;
+    const updateInterval = 100; // Update every 100ms for smoother display
 
     setBreakInterval = setInterval(() => {
         timeLeft -= updateInterval;
 
-        const seconds = Math.floor(timeLeft / 1000);
-        const milliseconds = Math.floor((timeLeft % 1000) / 10);
-        timerText.textContent = `${seconds}.${milliseconds.toString().padStart(2, '0')}`;
+        // Format as mm:ss
+        const totalSeconds = Math.ceil(timeLeft / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        timerText.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
         const offset = TIMER_CIRCLE_CIRCUMFERENCE * (1 - timeLeft / setBreakDurationMs);
         timerProgress.style.strokeDashoffset = offset;
 
         if (timeLeft <= 0) {
-            timerText.textContent = '0.00';
+            timerText.textContent = '0:00';
             closeSetBreakModal();
         }
     }, updateInterval);
