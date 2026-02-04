@@ -44,6 +44,8 @@ const FINAL_SET_POINTS = 15;
 const MIN_LEAD = 2;
 const TIMEOUT_DURATION = 30;
 const SET_BREAK_DURATION = 180;
+const TIMER_CIRCLE_RADIUS = 45; // SVG circle radius from viewBox
+const TIMER_CIRCLE_CIRCUMFERENCE = 2 * Math.PI * TIMER_CIRCLE_RADIUS;
 
 let timeoutInterval = null;
 let setBreakInterval = null;
@@ -138,10 +140,10 @@ function showTimeoutModal(teamName) {
     teamNameDisplay.textContent = `${teamName} Timeout`;
     modal.classList.remove('hidden');
 
-    let timeLeft = TIMEOUT_DURATION * 1000;
+    const timeoutDurationMs = TIMEOUT_DURATION * 1000;
+    let timeLeft = timeoutDurationMs;
     timerProgress.style.strokeDashoffset = 0;
 
-    const circumference = 283;
     const updateInterval = 10;
 
     timeoutInterval = setInterval(() => {
@@ -151,7 +153,7 @@ function showTimeoutModal(teamName) {
         const milliseconds = Math.floor((timeLeft % 1000) / 10);
         timerText.textContent = `${seconds}.${milliseconds.toString().padStart(2, '0')}`;
 
-        const offset = circumference * (1 - timeLeft / (TIMEOUT_DURATION * 1000));
+        const offset = TIMER_CIRCLE_CIRCUMFERENCE * (1 - timeLeft / timeoutDurationMs);
         timerProgress.style.strokeDashoffset = offset;
 
         if (timeLeft <= 0) {
@@ -180,10 +182,10 @@ function showSetBreakModal(setNumber) {
     titleDisplay.textContent = `Set ${setNumber - 1} Complete - Break Time`;
     modal.classList.remove('hidden');
 
-    let timeLeft = SET_BREAK_DURATION * 1000;
+    const setBreakDurationMs = SET_BREAK_DURATION * 1000;
+    let timeLeft = setBreakDurationMs;
     timerProgress.style.strokeDashoffset = 0;
 
-    const circumference = 283;
     const updateInterval = 10;
 
     setBreakInterval = setInterval(() => {
@@ -193,7 +195,7 @@ function showSetBreakModal(setNumber) {
         const milliseconds = Math.floor((timeLeft % 1000) / 10);
         timerText.textContent = `${seconds}.${milliseconds.toString().padStart(2, '0')}`;
 
-        const offset = circumference * (1 - timeLeft / (SET_BREAK_DURATION * 1000));
+        const offset = TIMER_CIRCLE_CIRCUMFERENCE * (1 - timeLeft / setBreakDurationMs);
         timerProgress.style.strokeDashoffset = offset;
 
         if (timeLeft <= 0) {
