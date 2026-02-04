@@ -662,10 +662,12 @@ function confirmRotationSetup() {
     
     if (rotationSetupState.isNewSet) {
         // Continue existing match with new set rotations
+        // Don't call beginMatch() as it would reset match state
+        // Just show scoreboard and update display with new rotations
         document.getElementById('scoreboard').classList.remove('hidden');
         updateDisplay();
     } else {
-        // Start a new match
+        // Start a new match - this will reset state and set up all UI elements
         beginMatch();
     }
 }
