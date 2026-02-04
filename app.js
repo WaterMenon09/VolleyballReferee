@@ -434,8 +434,12 @@ function validateSetup(team1Name, team2Name, team1Players, team2Players, team1Ca
             errors.push(`${teamName}: Duplicate jersey number(s): ${uniqueDuplicates.join(', ')}`);
         }
 
-        if (players.length > 0 && validPlayers.length < 6) {
-            errors.push(`${teamName}: At least 6 valid jersey numbers are required (found ${validPlayers.length})`);
+        if (players.length > 0) {
+            const requiredPlayers = libero ? 7 : 6;
+            if (validPlayers.length < requiredPlayers) {
+                const reason = libero ? ' (6 starters + 1 Libero)' : '';
+                errors.push(`${teamName}: At least ${requiredPlayers} valid jersey numbers are required${reason} (found ${validPlayers.length})`);
+            }
         }
 
         if (captain) {
