@@ -222,6 +222,7 @@ function closeSetBreakModal() {
     if (state.hasRotation) {
         showNewSetRotationSetup();
     } else {
+        document.getElementById('scoreboard').classList.remove('hidden');
         updateDisplay();
     }
 }
