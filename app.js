@@ -669,7 +669,6 @@ function confirmRotationSetup() {
         beginMatch();
     }
 }
-}
 
 function beginMatch() {
     resetMatchState();
