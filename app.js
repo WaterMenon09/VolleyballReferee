@@ -43,8 +43,10 @@ const REGULAR_SET_POINTS = 25;
 const FINAL_SET_POINTS = 15;
 const MIN_LEAD = 2;
 const TIMEOUT_DURATION = 30;
+const SET_BREAK_DURATION = 180;
 
 let timeoutInterval = null;
+let setBreakInterval = null;
 
 function init() {
     document.getElementById('startMatch').addEventListener('click', startMatch);
@@ -65,6 +67,7 @@ function init() {
     document.getElementById('timeout1').addEventListener('click', () => useTimeout(1));
     document.getElementById('timeout2').addEventListener('click', () => useTimeout(2));
     document.getElementById('continueEarly').addEventListener('click', closeTimeoutModal);
+    document.getElementById('continueSetBreak').addEventListener('click', closeSetBreakModal);
     document.getElementById('confirmRotation').addEventListener('click', confirmRotationSetup);
     document.getElementById('cancelSub').addEventListener('click', closeSubModal);
 
@@ -165,6 +168,54 @@ function closeTimeoutModal() {
     if (timeoutInterval) {
         clearInterval(timeoutInterval);
         timeoutInterval = null;
+    }
+}
+
+function showSetBreakModal(setNumber) {
+    const modal = document.getElementById('setBreakModal');
+    const timerText = document.getElementById('setBreakText');
+    const timerProgress = document.getElementById('setBreakProgress');
+    const titleDisplay = document.getElementById('setBreakTitle');
+
+    titleDisplay.textContent = `Set ${setNumber - 1} Complete - Break Time`;
+    modal.classList.remove('hidden');
+
+    let timeLeft = SET_BREAK_DURATION * 1000;
+    timerProgress.style.strokeDashoffset = 0;
+
+    const circumference = 283;
+    const updateInterval = 10;
+
+    setBreakInterval = setInterval(() => {
+        timeLeft -= updateInterval;
+
+        const seconds = Math.floor(timeLeft / 1000);
+        const milliseconds = Math.floor((timeLeft % 1000) / 10);
+        timerText.textContent = `${seconds}.${milliseconds.toString().padStart(2, '0')}`;
+
+        const offset = circumference * (1 - timeLeft / (SET_BREAK_DURATION * 1000));
+        timerProgress.style.strokeDashoffset = offset;
+
+        if (timeLeft <= 0) {
+            timerText.textContent = '0.00';
+            closeSetBreakModal();
+        }
+    }, updateInterval);
+}
+
+function closeSetBreakModal() {
+    const modal = document.getElementById('setBreakModal');
+    modal.classList.add('hidden');
+
+    if (setBreakInterval) {
+        clearInterval(setBreakInterval);
+        setBreakInterval = null;
+    }
+
+    if (state.hasRotation) {
+        showNewSetRotationSetup();
+    } else {
+        updateDisplay();
     }
 }
 
@@ -820,11 +871,7 @@ function checkSetWin() {
 
             switchSides();
 
-            if (state.hasRotation) {
-                showNewSetRotationSetup();
-            } else {
-                updateDisplay();
-            }
+            showSetBreakModal(state.currentSet);
         }
     }
 }
