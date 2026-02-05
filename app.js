@@ -506,6 +506,7 @@ function showRotationSetup() {
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
     updateRotationSetupDisplay();
+    updateRotationSetupColors();
 
     const header = document.querySelector('#rotationSetup h2');
     header.textContent = 'Set Starting Rotations';
@@ -529,6 +530,7 @@ function showNewSetRotationSetup() {
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
     updateRotationSetupDisplay();
+    updateRotationSetupColors();
 
     const header = document.querySelector('#rotationSetup h2');
     header.textContent = `Set ${state.currentSet} - Starting Rotations`;
@@ -714,6 +716,8 @@ function resetMatchState() {
     state.serving = 1;
     state.firstServer = 1;
     state.matchOver = false;
+    state.team1OriginalId = 'A';
+    state.team2OriginalId = 'B';
 }
 
 function resetToSetup() {
@@ -919,6 +923,26 @@ function updateRotationDisplay(team, rotation, captain, libero, isServing) {
             subIndicator.classList.add('visible');
         }
     });
+}
+
+function updateRotationSetupColors() {
+    const rotationTeam1Name = document.getElementById('rotationTeam1Name');
+    const rotationTeam2Name = document.getElementById('rotationTeam2Name');
+    
+    if (!rotationTeam1Name || !rotationTeam2Name) return;
+    
+    // Team A is blue (#667eea), Team B is red (#f5576c)
+    const blueColor = '#667eea';
+    const redColor = '#f5576c';
+    
+    // Apply colors based on original team identity
+    if (state.team1OriginalId === 'A') {
+        rotationTeam1Name.style.color = blueColor;
+        rotationTeam2Name.style.color = redColor;
+    } else {
+        rotationTeam1Name.style.color = redColor;
+        rotationTeam2Name.style.color = blueColor;
+    }
 }
 
 function updateTeamColors() {
