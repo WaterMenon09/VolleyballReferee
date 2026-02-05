@@ -860,6 +860,14 @@ h1 {
     border-right: 3px solid #f5576c;
 }
 
+.set-score-item.teamA-set-win {
+    border-left: 3px solid #667eea;
+}
+
+.set-score-item.teamB-set-win {
+    border-right: 3px solid #f5576c;
+}
+
 .no-sets {
     font-size: 0.85rem;
     color: rgba(255, 255, 255, 0.4);
@@ -943,6 +951,25 @@ h1 {
     color: #f5576c;
 }
 
+/* Dynamic timeline colors based on team identity */
+.timeline-team[data-team-color="blue"] .timeline-label {
+    color: #667eea;
+}
+
+.timeline-team[data-team-color="red"] .timeline-label {
+    color: #f5576c;
+}
+
+.timeline-team[data-team-color="blue"] .timeline-cell.scored {
+    background: rgba(102, 126, 234, 0.4);
+    color: #a8b5f0;
+}
+
+.timeline-team[data-team-color="red"] .timeline-cell.scored {
+    background: rgba(245, 87, 108, 0.4);
+    color: #f9a8b5;
+}
+
 .timeline-row {
     display: flex;
     flex: 1;
@@ -962,16 +989,6 @@ h1 {
 
 .timeline-cell.scored {
     background: rgba(255, 255, 255, 0.15);
-}
-
-.timeline-team:first-child .timeline-cell.scored {
-    background: rgba(102, 126, 234, 0.4);
-    color: #a8b5f0;
-}
-
-.timeline-team:last-child .timeline-cell.scored {
-    background: rgba(245, 87, 108, 0.4);
-    color: #f9a8b5;
 }
 
 .timeline-cell.empty {

@@ -28,7 +28,9 @@ const state = {
     currentSetPoints: [],
     serving: 1,
     firstServer: 1,
-    matchOver: false
+    matchOver: false,
+    team1OriginalId: 'A',
+    team2OriginalId: 'B'
 };
 
 const rotationSetupState = {
@@ -390,6 +392,7 @@ function switchSides() {
     [state.team1Players, state.team2Players] = [state.team2Players, state.team1Players];
     [state.team1Captain, state.team2Captain] = [state.team2Captain, state.team1Captain];
     [state.team1Libero, state.team2Libero] = [state.team2Libero, state.team1Libero];
+    [state.team1OriginalId, state.team2OriginalId] = [state.team2OriginalId, state.team1OriginalId];
 
     state.setHistory = state.setHistory.map(set => ({
         ...set,
@@ -410,6 +413,7 @@ function swapTeams() {
     [state.team1Rotation, state.team2Rotation] = [state.team2Rotation, state.team1Rotation];
     [state.team1Subs, state.team2Subs] = [state.team2Subs, state.team1Subs];
     [state.team1LiberoIn, state.team2LiberoIn] = [state.team2LiberoIn, state.team1LiberoIn];
+    [state.team1OriginalId, state.team2OriginalId] = [state.team2OriginalId, state.team1OriginalId];
 
     state.serving = state.serving === 1 ? 2 : 1;
     state.firstServer = state.firstServer === 1 ? 2 : 1;
@@ -561,6 +565,7 @@ function showRotationSetup() {
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
     updateRotationSetupDisplay();
+    updateRotationSetupColors();
 
     const header = document.querySelector('#rotationSetup h2');
     header.textContent = 'Set Starting Rotations';
@@ -584,6 +589,7 @@ function showNewSetRotationSetup() {
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
     updateRotationSetupDisplay();
+    updateRotationSetupColors();
 
     const header = document.querySelector('#rotationSetup h2');
     header.textContent = `Set ${state.currentSet} - Starting Rotations`;
@@ -769,6 +775,8 @@ function resetMatchState() {
     state.serving = 1;
     state.firstServer = 1;
     state.matchOver = false;
+    state.team1OriginalId = 'A';
+    state.team2OriginalId = 'B';
 }
 
 function resetToSetup() {
@@ -848,11 +856,13 @@ function checkSetWin() {
     }
 
     if (setWinner) {
+        const winnerOriginalId = setWinner === 1 ? state.team1OriginalId : state.team2OriginalId;
         state.setHistory.push({
             set: state.currentSet,
             team1Score: state.team1Score,
             team2Score: state.team2Score,
-            winner: setWinner
+            winner: setWinner,
+            winnerOriginalId: winnerOriginalId
         });
 
         if (setWinner === 1) {
@@ -970,7 +980,65 @@ function updateRotationDisplay(team, rotation, captain, libero, isServing) {
     });
 }
 
+function updateRotationSetupColors() {
+    const rotationTeam1Name = document.getElementById('rotationTeam1Name');
+    const rotationTeam2Name = document.getElementById('rotationTeam2Name');
+    
+    if (!rotationTeam1Name || !rotationTeam2Name) return;
+    
+    // Team A is blue (#667eea), Team B is red (#f5576c)
+    const blueColor = '#667eea';
+    const redColor = '#f5576c';
+    
+    // Apply colors based on original team identity
+    if (state.team1OriginalId === 'A') {
+        rotationTeam1Name.style.color = blueColor;
+        rotationTeam2Name.style.color = redColor;
+    } else {
+        rotationTeam1Name.style.color = redColor;
+        rotationTeam2Name.style.color = blueColor;
+    }
+}
+
+function updateTeamColors() {
+    const team1Container = document.querySelector('.current-set .team1');
+    const team2Container = document.querySelector('.current-set .team2');
+    const team1ScoreEl = document.getElementById('team1Score');
+    const team2ScoreEl = document.getElementById('team2Score');
+    const timeline1 = document.querySelector('.timeline-team:first-child');
+    const timeline2 = document.querySelector('.timeline-team:last-child');
+    
+    // Team A is blue (#667eea), Team B is red (#f5576c)
+    const blueColor = '#667eea';
+    const redColor = '#f5576c';
+    
+    // Apply colors based on original team identity, not position
+    if (state.team1OriginalId === 'A') {
+        // Team A is in position 1 (left)
+        team1Container.style.borderColor = blueColor;
+        team1ScoreEl.style.color = blueColor;
+        team2Container.style.borderColor = redColor;
+        team2ScoreEl.style.color = redColor;
+        
+        // Update timeline colors
+        if (timeline1) timeline1.setAttribute('data-team-color', 'blue');
+        if (timeline2) timeline2.setAttribute('data-team-color', 'red');
+    } else {
+        // Team B is in position 1 (left), Team A is in position 2 (right)
+        team1Container.style.borderColor = redColor;
+        team1ScoreEl.style.color = redColor;
+        team2Container.style.borderColor = blueColor;
+        team2ScoreEl.style.color = blueColor;
+        
+        // Update timeline colors
+        if (timeline1) timeline1.setAttribute('data-team-color', 'red');
+        if (timeline2) timeline2.setAttribute('data-team-color', 'blue');
+    }
+}
+
 function updateDisplay() {
+    updateTeamColors();
+    
     document.getElementById('team1Display').textContent = state.team1Name;
     document.getElementById('team2Display').textContent = state.team2Name;
     document.getElementById('team1Score').textContent = state.team1Score;
@@ -980,7 +1048,9 @@ function updateDisplay() {
         setsHTML = '<span class="no-sets">No sets completed</span>';
     } else {
         state.setHistory.forEach((set, index) => {
-            const winnerClass = set.winner === 1 ? 'team1-set-win' : 'team2-set-win';
+            // Use winnerOriginalId if available (new format), fallback to winner (old format)
+            const winnerTeamId = set.winnerOriginalId || (set.winner === 1 ? 'A' : 'B');
+            const winnerClass = winnerTeamId === 'A' ? 'teamA-set-win' : 'teamB-set-win';
             setsHTML += `<div class="set-score-item ${winnerClass}">${set.team1Score}-${set.team2Score}</div>`;
         });
     }
