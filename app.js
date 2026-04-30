@@ -432,7 +432,32 @@ function swapTeams() {
         team2Score: set.team1Score
     }));
 
-    state.pointHistory = [];
+    state.pointHistory = state.pointHistory.map(snap => ({
+        ...snap,
+        team1Score: snap.team2Score,
+        team2Score: snap.team1Score,
+        team1Sets: snap.team2Sets,
+        team2Sets: snap.team1Sets,
+        serving: snap.serving === 1 ? 2 : 1,
+        team1Rotation: snap.team2Rotation,
+        team2Rotation: snap.team1Rotation,
+        team1Subs: snap.team2Subs,
+        team2Subs: snap.team1Subs,
+        team1LiberoIn: snap.team2LiberoIn,
+        team2LiberoIn: snap.team1LiberoIn,
+        currentSetPoints: snap.currentSetPoints.map(p => ({
+            ...p,
+            team: p.team === 1 ? 2 : 1,
+            team1Score: p.team2Score,
+            team2Score: p.team1Score
+        })),
+        setHistory: snap.setHistory.map(s => ({
+            ...s,
+            winner: s.winner === 1 ? 2 : 1,
+            team1Score: s.team2Score,
+            team2Score: s.team1Score
+        }))
+    }));
 
     updateDisplay();
 }
