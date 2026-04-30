@@ -54,7 +54,7 @@ let setBreakInterval = null;
 
 function init() {
     document.getElementById('startMatch').addEventListener('click', startMatch);
-    document.getElementById('newMatch').addEventListener('click', resetToSetup);
+    document.getElementById('newMatch').addEventListener('click', showNewMatchModal);
     document.getElementById('playAgain').addEventListener('click', resetToSetup);
     document.getElementById('undoPoint').addEventListener('click', undoLastPoint);
 
@@ -74,6 +74,11 @@ function init() {
     document.getElementById('continueSetBreak').addEventListener('click', closeSetBreakModal);
     document.getElementById('confirmRotation').addEventListener('click', confirmRotationSetup);
     document.getElementById('cancelSub').addEventListener('click', closeSubModal);
+    document.getElementById('cancelNewMatch').addEventListener('click', closeNewMatchModal);
+    document.getElementById('confirmNewMatch').addEventListener('click', () => {
+        closeNewMatchModal();
+        resetToSetup();
+    });
 
     document.querySelectorAll('.rotation-setup-pos').forEach(pos => {
         pos.addEventListener('click', handlePositionClick);
@@ -355,6 +360,49 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
 
     rotation[rotationIndex] = newPlayer;
     updateDisplay();
+}
+
+function showNewMatchModal() {
+    const summary = document.getElementById('confirmScoreSummary');
+    const team1Color = state.team1OriginalId === 'A' ? '#667eea' : '#f5576c';
+    const team2Color = state.team2OriginalId === 'A' ? '#667eea' : '#f5576c';
+
+    let rows = '';
+    state.setHistory.forEach((s, i) => {
+        const t1Won = s.winner === 1;
+        rows += `
+            <div class="confirm-set-row">
+                <span class="${t1Won ? 'confirm-score-winner' : 'confirm-score-loser'}">${s.team1Score}</span>
+                <span class="confirm-set-label">Set ${i + 1}</span>
+                <span class="${!t1Won ? 'confirm-score-winner' : 'confirm-score-loser'}">${s.team2Score}</span>
+            </div>`;
+    });
+
+    rows += `
+        <div class="confirm-set-row confirm-set-live">
+            <span class="confirm-score-winner">${state.team1Score}</span>
+            <span class="confirm-set-label confirm-set-label-live">Set ${state.currentSet} · live</span>
+            <span class="confirm-score-winner">${state.team2Score}</span>
+        </div>`;
+
+    summary.innerHTML = `
+        <div class="confirm-team-header">
+            <span style="color:${team1Color}">${state.team1Name}</span>
+            <span class="confirm-sets-label">Sets</span>
+            <span style="color:${team2Color}">${state.team2Name}</span>
+        </div>
+        <div class="confirm-sets-tally">
+            <span>${state.team1Sets}</span>
+            <span class="confirm-tally-sep">–</span>
+            <span>${state.team2Sets}</span>
+        </div>
+        ${rows}`;
+
+    document.getElementById('newMatchModal').classList.remove('hidden');
+}
+
+function closeNewMatchModal() {
+    document.getElementById('newMatchModal').classList.add('hidden');
 }
 
 function closeSubModal() {

@@ -1289,6 +1289,51 @@ h1 {
         bottom: 5px;
         right: 10px;
     }
+
+    /* Confirmation modal – tablet/large phone */
+    .confirm-icon {
+        width: 42px;
+        height: 42px;
+        font-size: 1.2rem;
+        margin-bottom: 10px;
+    }
+
+    .confirm-subtitle {
+        font-size: 0.8rem;
+        margin-bottom: 14px;
+    }
+
+    .confirm-team-header {
+        padding: 7px 12px;
+        font-size: 0.72rem;
+    }
+
+    .confirm-sets-tally {
+        padding: 8px 12px;
+        font-size: 1.1rem;
+    }
+
+    .confirm-set-row {
+        padding: 6px 12px;
+    }
+
+    .confirm-score-winner,
+    .confirm-score-loser {
+        font-size: 0.72rem;
+    }
+
+    .confirm-set-label {
+        font-size: 0.6rem;
+        padding: 2px 5px;
+    }
+
+    .confirm-score-summary {
+        margin-bottom: 14px;
+    }
+
+    .confirm-buttons {
+        gap: 8px;
+    }
 }
 
 @media (max-width: 360px) {
@@ -1322,6 +1367,33 @@ h1 {
         width: 42px;
         height: 42px;
         font-size: 0.75rem;
+    }
+
+    /* Confirmation modal – small phones (iPhone SE etc.) */
+    .confirm-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+
+    .confirm-sets-tally {
+        font-size: 1rem;
+        padding: 7px 10px;
+    }
+
+    .confirm-team-header,
+    .confirm-set-row {
+        padding: 5px 10px;
+    }
+
+    .confirm-buttons {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .confirm-buttons .btn {
+        width: 100%;
     }
 }
 
@@ -1545,6 +1617,33 @@ h1 {
         bottom: 3px;
         right: 8px;
     }
+
+    /* Confirmation modal – landscape phones */
+    .confirm-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 0.95rem;
+        margin-bottom: 6px;
+    }
+
+    .confirm-subtitle {
+        font-size: 0.75rem;
+        margin-bottom: 8px;
+    }
+
+    .confirm-score-summary {
+        margin-bottom: 10px;
+    }
+
+    .confirm-team-header,
+    .confirm-set-row {
+        padding: 4px 10px;
+    }
+
+    .confirm-sets-tally {
+        padding: 6px 10px;
+        font-size: 0.95rem;
+    }
 }
 
 /* Extra wide landscape (tablets in landscape) */
@@ -1567,4 +1666,119 @@ h1 {
         height: 30px;
         font-size: 0.7rem;
     }
+}
+
+/* ── New Match Confirmation Modal ─────────────────────────────── */
+
+.confirm-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: rgba(245, 87, 108, 0.12);
+    border: 1px solid rgba(245, 87, 108, 0.28);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+    font-size: 1.5rem;
+}
+
+.confirm-subtitle {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+}
+
+.confirm-score-summary {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.confirm-team-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.confirm-sets-label {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.confirm-sets-tally {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #fff;
+}
+
+.confirm-tally-sep {
+    color: rgba(255, 255, 255, 0.2);
+    font-size: 0.75rem;
+}
+
+.confirm-set-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.confirm-set-row:last-child {
+    border-bottom: none;
+}
+
+.confirm-set-live {
+    background: rgba(245, 87, 108, 0.05);
+}
+
+.confirm-set-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 7px;
+}
+
+.confirm-set-label-live {
+    color: rgba(245, 87, 108, 0.75);
+    background: rgba(245, 87, 108, 0.1);
+    border: 1px solid rgba(245, 87, 108, 0.2);
+}
+
+.confirm-score-winner {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.confirm-score-loser {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.38);
+}
+
+.confirm-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.confirm-buttons .btn {
+    flex: 1;
 }
