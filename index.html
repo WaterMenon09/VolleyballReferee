@@ -6,8 +6,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#1a1a2e">
+    <meta name="theme-color" content="#071545">
     <title>Volleyball Referee</title>
+    <link rel="icon" type="image/png" href="icons/volleyball.png">
+    <link rel="apple-touch-icon" href="icons/volleyball.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-RBPL9H3D0Y"></script>
@@ -33,16 +38,28 @@
                     </div>
                     <div class="team-input">
                         <label for="team1Players">Jersey Numbers (comma separated):</label>
-                        <input type="text" id="team1Players" placeholder="1, 2, 3, 4, 5, 6">
+                        <input type="text" id="team1Players" placeholder="1, 2, A, ⚡, 10">
                     </div>
                     <div class="team-input-row">
                         <div class="team-input">
                             <label for="team1Captain">Captain #:</label>
-                            <input type="number" id="team1Captain" placeholder="Cap">
+                            <input type="text" id="team1Captain" placeholder="Cap" maxlength="3">
                         </div>
                         <div class="team-input">
                             <label for="team1Libero">Libero #:</label>
-                            <input type="number" id="team1Libero" placeholder="Lib">
+                            <input type="text" id="team1Libero" placeholder="Lib" maxlength="3">
+                        </div>
+                    </div>
+                    <div class="color-picker-row">
+                        <label>Color:</label>
+                        <input type="color" id="team1Color" value="#2979ff">
+                        <div class="color-presets">
+                            <button class="color-swatch" data-team="1" data-color="#2979ff" style="background:#2979ff" title="Blue"></button>
+                            <button class="color-swatch" data-team="1" data-color="#00b0ff" style="background:#00b0ff" title="Sky blue"></button>
+                            <button class="color-swatch" data-team="1" data-color="#00c853" style="background:#00c853" title="Green"></button>
+                            <button class="color-swatch" data-team="1" data-color="#f5c842" style="background:#f5c842" title="Yellow"></button>
+                            <button class="color-swatch" data-team="1" data-color="#ffffff" style="background:#ffffff" title="White"></button>
+                            <button class="color-swatch" data-team="1" data-color="#ff8f00" style="background:#ff8f00" title="Orange"></button>
                         </div>
                     </div>
                 </div>
@@ -54,16 +71,28 @@
                     </div>
                     <div class="team-input">
                         <label for="team2Players">Jersey Numbers (comma separated):</label>
-                        <input type="text" id="team2Players" placeholder="1, 2, 3, 4, 5, 6">
+                        <input type="text" id="team2Players" placeholder="1, 2, A, ⚡, 10">
                     </div>
                     <div class="team-input-row">
                         <div class="team-input">
                             <label for="team2Captain">Captain #:</label>
-                            <input type="number" id="team2Captain" placeholder="Cap">
+                            <input type="text" id="team2Captain" placeholder="Cap" maxlength="3">
                         </div>
                         <div class="team-input">
                             <label for="team2Libero">Libero #:</label>
-                            <input type="number" id="team2Libero" placeholder="Lib">
+                            <input type="text" id="team2Libero" placeholder="Lib" maxlength="3">
+                        </div>
+                    </div>
+                    <div class="color-picker-row">
+                        <label>Color:</label>
+                        <input type="color" id="team2Color" value="#ff8f00">
+                        <div class="color-presets">
+                            <button class="color-swatch" data-team="2" data-color="#ff8f00" style="background:#ff8f00" title="Orange"></button>
+                            <button class="color-swatch" data-team="2" data-color="#c62828" style="background:#c62828" title="Red"></button>
+                            <button class="color-swatch" data-team="2" data-color="#e040fb" style="background:#e040fb" title="Purple"></button>
+                            <button class="color-swatch" data-team="2" data-color="#f5c842" style="background:#f5c842" title="Yellow"></button>
+                            <button class="color-swatch" data-team="2" data-color="#ffffff" style="background:#ffffff" title="White"></button>
+                            <button class="color-swatch" data-team="2" data-color="#2979ff" style="background:#2979ff" title="Blue"></button>
                         </div>
                     </div>
                 </div>
@@ -103,6 +132,7 @@
                         </div>
                     </div>
                     <div class="available-players" id="availablePlayers1"></div>
+                    <button class="btn btn-secondary use-prev-rotation" data-team="1" style="display:none">Use previous rotation</button>
                 </div>
                 <div class="rotation-setup-team">
                     <h3 id="rotationTeam2Name">Team B</h3>
@@ -119,6 +149,7 @@
                         </div>
                     </div>
                     <div class="available-players" id="availablePlayers2"></div>
+                    <button class="btn btn-secondary use-prev-rotation" data-team="2" style="display:none">Use previous rotation</button>
                 </div>
             </div>
             <div id="rotationSetupError" class="setup-error hidden"></div>
@@ -218,7 +249,7 @@
 
             
             <div class="controls">
-                <button id="newMatch" class="btn btn-danger">New Match</button>
+                <button id="returnToSetup" class="btn btn-secondary">Return to Setup</button>
             </div>
         </div>
 
@@ -267,20 +298,20 @@
         </div>
     </div>
 
-    <div id="newMatchModal" class="modal hidden">
+    <div id="returnToSetupModal" class="modal hidden">
         <div class="modal-content">
-            <div class="confirm-icon">⚠️</div>
-            <h2>Start New Match?</h2>
-            <p class="confirm-subtitle">All current match data will be lost.</p>
-            <div class="confirm-score-summary" id="confirmScoreSummary"></div>
+            <div class="confirm-icon">↩️</div>
+            <h2>Return to Setup?</h2>
+            <p class="confirm-subtitle">The current match will be cancelled.</p>
+            <div class="confirm-score-summary" id="returnToSetupScoreSummary"></div>
             <div class="confirm-buttons">
-                <button class="btn btn-secondary" id="cancelNewMatch">Cancel</button>
-                <button class="btn btn-danger" id="confirmNewMatch">New Match</button>
+                <button class="btn btn-secondary" id="cancelReturnToSetup">Cancel</button>
+                <button class="btn btn-danger" id="confirmReturnToSetup">Return to Setup</button>
             </div>
         </div>
     </div>
 
-    <footer class="credits">v2.12 | Created by Menon Pranto</footer>
+    <footer class="credits">v3.0 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
 </body>
