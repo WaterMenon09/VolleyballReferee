@@ -30,7 +30,9 @@ const state = {
     firstServer: 1,
     matchOver: false,
     team1OriginalId: 'A',
-    team2OriginalId: 'B'
+    team2OriginalId: 'B',
+    lastStartingRotation1: null,
+    lastStartingRotation2: null
 };
 
 const rotationSetupState = {
@@ -51,10 +53,210 @@ const TIMER_CIRCLE_CIRCUMFERENCE = 2 * Math.PI * TIMER_CIRCLE_RADIUS;
 
 let timeoutInterval = null;
 let setBreakInterval = null;
+let _scorePulseTeam = null;
+let _dndInitialized = false;
+
+function initDragAndDrop() {
+    if (_dndInitialized) return;
+    _dndInitialized = true;
+    const container = document.getElementById('rotationSetup');
+    let ghost = null;
+    let dragSource = null;
+    let dragTeam = null;
+    let dragFromPos = null;
+    let didMove = false;
+    let activePointerId = null;
+    let suppressNextClick = false;
+
+    function getRotation(team) {
+        return team === 1 ? rotationSetupState.team1Rotation : rotationSetupState.team2Rotation;
+    }
+
+    function getPlayerAt(team, pos) { return getRotation(team)[pos] || null; }
+
+    function setPlayer(team, pos, player) {
+        getRotation(team)[pos] = player;
+    }
+
+    function clearPlayer(team, pos) {
+        getRotation(team)[pos] = null;
+    }
+
+    function refreshUI(team) {
+        updateAvailablePlayers(team);
+        updateRotationSetupDisplay();
+    }
+
+    function createGhost(el) {
+        ghost = el.cloneNode(true);
+        ghost.style.cssText = `position:fixed;pointer-events:none;z-index:9999;opacity:0.85;transform:scale(1.15);transition:none;`;
+        document.body.appendChild(ghost);
+    }
+
+    function moveGhost(x, y) {
+        if (!ghost) return;
+        const r = ghost.getBoundingClientRect();
+        ghost.style.left = `${x - r.width / 2}px`;
+        ghost.style.top = `${y - r.height / 2}px`;
+    }
+
+    function removeGhost() {
+        if (ghost) { ghost.remove(); ghost = null; }
+        document.querySelectorAll('.drop-hint').forEach(el => el.classList.remove('drop-hint'));
+    }
+
+    function getDropTarget(x, y) {
+        if (!ghost) return null;
+        ghost.style.display = 'none';
+        const el = document.elementFromPoint(x, y);
+        ghost.style.display = '';
+        if (!el) return null;
+        return el.closest('.rotation-setup-pos') || el.closest('.available-player');
+    }
+
+    container.addEventListener('pointerdown', e => {
+        suppressNextClick = false;
+        const src = e.target.closest('.available-player:not(.used), .rotation-setup-pos');
+        if (!src) return;
+        const team = parseInt(src.dataset.team);
+        if (!team) return;
+
+        const isPos = src.classList.contains('rotation-setup-pos');
+        const fromPos = isPos ? parseInt(src.dataset.pos) : null;
+        if (isPos && !getRotation(team)[fromPos]) return;
+
+        dragSource = src;
+        dragTeam = team;
+        dragFromPos = fromPos;
+        didMove = false;
+        activePointerId = e.pointerId;
+        src.setPointerCapture(e.pointerId);
+        createGhost(src);
+        moveGhost(e.clientX, e.clientY);
+        src.classList.add('dragging');
+        e.preventDefault();
+    }, { passive: false });
+
+    container.addEventListener('pointermove', e => {
+        if (!dragSource || e.pointerId !== activePointerId) return;
+        didMove = true;
+        moveGhost(e.clientX, e.clientY);
+
+        document.querySelectorAll('.drop-hint').forEach(el => el.classList.remove('drop-hint'));
+        const target = getDropTarget(e.clientX, e.clientY);
+        if (target && target.classList.contains('rotation-setup-pos') && parseInt(target.dataset.team) === dragTeam) {
+            target.classList.add('drop-hint');
+        }
+    });
+
+    container.addEventListener('pointerup', e => {
+        if (!dragSource || e.pointerId !== activePointerId) return;
+        dragSource.classList.remove('dragging');
+
+        if (!didMove) {
+            removeGhost();
+            dragSource = null;
+            return;
+        }
+
+        suppressNextClick = true;
+
+        const target = getDropTarget(e.clientX, e.clientY);
+        removeGhost();
+
+        if (target && target.classList.contains('rotation-setup-pos')) {
+            const targetTeam = parseInt(target.dataset.team);
+            const targetPos = parseInt(target.dataset.pos);
+
+            if (targetTeam === dragTeam) {
+                const player = dragFromPos !== null
+                    ? getPlayerAt(dragTeam, dragFromPos)
+                    : dragSource.dataset.player;
+
+                if (player) {
+                    const displaced = getPlayerAt(dragTeam, targetPos);
+                    setPlayer(dragTeam, targetPos, player);
+                    if (dragFromPos !== null) {
+                        // Slot-to-slot: put displaced player back in source slot
+                        setPlayer(dragTeam, dragFromPos, displaced);
+                    }
+                    refreshUI(dragTeam);
+                }
+            }
+        }
+
+        dragSource = null;
+        dragTeam = null;
+        dragFromPos = null;
+        activePointerId = null;
+    });
+
+    container.addEventListener('pointercancel', () => {
+        if (dragSource) dragSource.classList.remove('dragging');
+        removeGhost();
+        dragSource = null;
+        dragTeam = null;
+        dragFromPos = null;
+        activePointerId = null;
+    });
+
+    container.addEventListener('click', e => {
+        if (!suppressNextClick) return;
+        suppressNextClick = false;
+        if (e.target.closest('.rotation-setup-pos, .available-player')) {
+            e.stopPropagation();
+        }
+    }, true);
+}
+
+function hexToRgb(hex) {
+    let h = hex.replace('#', '');
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    const v = parseInt(h, 16);
+    return `${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}`;
+}
+
+function applyTeamColors(c1, c2) {
+    const root = document.documentElement.style;
+    root.setProperty('--team1-color', c1);
+    root.setProperty('--team1-rgb', hexToRgb(c1));
+    root.setProperty('--team2-color', c2);
+    root.setProperty('--team2-rgb', hexToRgb(c2));
+    document.getElementById('team1Color').value = c1;
+    document.getElementById('team2Color').value = c2;
+    try { localStorage.setItem('vb-team-colors', JSON.stringify({ c1, c2 })); } catch (_) {}
+}
 
 function init() {
+    // Restore saved team colors
+    try {
+        const saved = JSON.parse(localStorage.getItem('vb-team-colors') || 'null');
+        if (saved) applyTeamColors(saved.c1, saved.c2);
+    } catch (_) {}
+
+    document.getElementById('team1Color').addEventListener('input', e => {
+        const c2 = getComputedStyle(document.documentElement).getPropertyValue('--team2-color').trim();
+        applyTeamColors(e.target.value, c2);
+    });
+    document.getElementById('team2Color').addEventListener('input', e => {
+        const c1 = getComputedStyle(document.documentElement).getPropertyValue('--team1-color').trim();
+        applyTeamColors(c1, e.target.value);
+    });
+    document.querySelectorAll('.color-swatch').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const team = e.currentTarget.dataset.team;
+            const color = e.currentTarget.dataset.color;
+            if (team === '1') {
+                const c2 = getComputedStyle(document.documentElement).getPropertyValue('--team2-color').trim();
+                applyTeamColors(color, c2);
+            } else {
+                const c1 = getComputedStyle(document.documentElement).getPropertyValue('--team1-color').trim();
+                applyTeamColors(c1, color);
+            }
+        });
+    });
+
     document.getElementById('startMatch').addEventListener('click', startMatch);
-    document.getElementById('newMatch').addEventListener('click', showNewMatchModal);
     document.getElementById('playAgain').addEventListener('click', resetToSetup);
     document.getElementById('undoPoint').addEventListener('click', undoLastPoint);
 
@@ -74,11 +276,9 @@ function init() {
     document.getElementById('continueSetBreak').addEventListener('click', closeSetBreakModal);
     document.getElementById('confirmRotation').addEventListener('click', confirmRotationSetup);
     document.getElementById('cancelSub').addEventListener('click', closeSubModal);
-    document.getElementById('cancelNewMatch').addEventListener('click', closeNewMatchModal);
-    document.getElementById('confirmNewMatch').addEventListener('click', () => {
-        closeNewMatchModal();
-        resetToSetup();
-    });
+    document.getElementById('returnToSetup').addEventListener('click', showReturnToSetupModal);
+    document.getElementById('cancelReturnToSetup').addEventListener('click', closeReturnToSetupModal);
+    document.getElementById('confirmReturnToSetup').addEventListener('click', confirmReturnToSetup);
 
     document.querySelectorAll('.rotation-setup-pos').forEach(pos => {
         pos.addEventListener('click', handlePositionClick);
@@ -86,6 +286,21 @@ function init() {
 
     document.querySelectorAll('#rotation1 .rotation-pos, #rotation2 .rotation-pos').forEach(pos => {
         pos.addEventListener('click', handleGamePositionClick);
+    });
+
+    document.querySelectorAll('.use-prev-rotation').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const team = parseInt(e.currentTarget.dataset.team);
+            const prev = team === 1 ? state.lastStartingRotation1 : state.lastStartingRotation2;
+            if (!prev || prev.length < 6) return;
+            const target = team === 1 ? rotationSetupState.team1Rotation : rotationSetupState.team2Rotation;
+            for (let i = 0; i < 6; i++) target[i + 1] = prev[i];
+            updateAvailablePlayers(team);
+            updateRotationSetupDisplay();
+            rotationSetupState.selectedPosition = null;
+            rotationSetupState.selectedTeam = null;
+            document.querySelectorAll('.rotation-setup-pos').forEach(p => p.classList.remove('selected'));
+        });
     });
 }
 
@@ -274,46 +489,51 @@ function showSubModal(team, position) {
 
     let html = '';
 
+    const makeSubEl = (player, classes, attrs = {}) => {
+        const el = document.createElement('div');
+        el.className = ['sub-option', ...classes].join(' ');
+        el.dataset.player = player;
+        el.textContent = player;
+        Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+        return el;
+    };
+
+    const fragment = document.createDocumentFragment();
+
     if (subs[rotationIndex] && currentPlayer !== subs[rotationIndex].original) {
         const original = subs[rotationIndex].original;
-        html += `<div class="sub-option return-player" data-player="${original}" title="Return original player">${original}</div>`;
+        fragment.appendChild(makeSubEl(original, ['return-player'], { title: 'Return original player' }));
     }
 
     if (libero && !playersOnCourt.includes(libero)) {
         if (isBackRow) {
-            html += `<div class="sub-option libero" data-player="${libero}" data-is-libero="true" title="Libero">${libero}</div>`;
+            fragment.appendChild(makeSubEl(libero, ['libero'], { 'data-is-libero': 'true', title: 'Libero' }));
         } else {
-            html += `<div class="sub-option libero disabled" data-player="${libero}" title="Libero can only sub in back row">${libero}</div>`;
+            fragment.appendChild(makeSubEl(libero, ['libero', 'disabled'], { title: 'Libero can only sub in back row' }));
         }
-    }
-
-    if (currentPlayer === libero && liberoIn !== null) {
-        const originalPlayer = team === 1 ?
-            state.team1Rotation.find((p, i) => state.team1Subs[i]?.liberoFor === currentPlayer) :
-            state.team2Rotation.find((p, i) => state.team2Subs[i]?.liberoFor === currentPlayer);
     }
 
     availableSubs.forEach(player => {
         if (player === libero) return;
-
-        // Skip if already added as return player for current position
-        if (subs[rotationIndex] && player === subs[rotationIndex].original) {
-            return;
-        }
+        if (subs[rotationIndex] && player === subs[rotationIndex].original) return;
 
         const subEntry = Object.entries(subs).find(([idx, sub]) => sub.original === player);
         if (subEntry) {
             const [subIdx] = subEntry;
             if (parseInt(subIdx) !== rotationIndex) {
-                html += `<div class="sub-option disabled" data-player="${player}" title="Can only return to position ${parseInt(subIdx) + 1}">${player}</div>`;
+                fragment.appendChild(makeSubEl(player, ['disabled'], { title: `Can only return to position ${parseInt(subIdx) + 1}` }));
                 return;
             }
         }
-
-        html += `<div class="sub-option" data-player="${player}">${player}</div>`;
+        fragment.appendChild(makeSubEl(player, []));
     });
 
-    optionsContainer.innerHTML = html || '<p>No substitutes available</p>';
+    optionsContainer.innerHTML = '';
+    if (fragment.childElementCount === 0) {
+        optionsContainer.innerHTML = '<p>No substitutes available</p>';
+    } else {
+        optionsContainer.appendChild(fragment);
+    }
 
     optionsContainer.querySelectorAll('.sub-option:not(.disabled)').forEach(opt => {
         opt.addEventListener('click', handleSubSelect);
@@ -362,10 +582,13 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
     updateDisplay();
 }
 
-function showNewMatchModal() {
-    const summary = document.getElementById('confirmScoreSummary');
-    const team1Color = state.team1OriginalId === 'A' ? '#667eea' : '#f5576c';
-    const team2Color = state.team2OriginalId === 'A' ? '#667eea' : '#f5576c';
+function showReturnToSetupModal() {
+    const summary = document.getElementById('returnToSetupScoreSummary');
+    const cssStyle = getComputedStyle(document.documentElement);
+    const colorA = cssStyle.getPropertyValue('--team1-color').trim();
+    const colorB = cssStyle.getPropertyValue('--team2-color').trim();
+    const team1Color = state.team1OriginalId === 'A' ? colorA : colorB;
+    const team2Color = state.team2OriginalId === 'A' ? colorA : colorB;
 
     let rows = '';
     state.setHistory.forEach((s, i) => {
@@ -377,7 +600,6 @@ function showNewMatchModal() {
                 <span class="${!t1Won ? 'confirm-score-winner' : 'confirm-score-loser'}">${s.team2Score}</span>
             </div>`;
     });
-
     rows += `
         <div class="confirm-set-row confirm-set-live">
             <span class="confirm-score-winner">${state.team1Score}</span>
@@ -387,9 +609,9 @@ function showNewMatchModal() {
 
     summary.innerHTML = `
         <div class="confirm-team-header">
-            <span style="color:${team1Color}">${state.team1Name}</span>
+            <span style="color:${team1Color}">${escapeHtml(state.team1Name)}</span>
             <span class="confirm-sets-label">Sets</span>
-            <span style="color:${team2Color}">${state.team2Name}</span>
+            <span style="color:${team2Color}">${escapeHtml(state.team2Name)}</span>
         </div>
         <div class="confirm-sets-tally">
             <span>${state.team1Sets}</span>
@@ -398,11 +620,20 @@ function showNewMatchModal() {
         </div>
         ${rows}`;
 
-    document.getElementById('newMatchModal').classList.remove('hidden');
+    document.getElementById('returnToSetupModal').classList.remove('hidden');
 }
 
-function closeNewMatchModal() {
-    document.getElementById('newMatchModal').classList.add('hidden');
+function closeReturnToSetupModal() {
+    document.getElementById('returnToSetupModal').classList.add('hidden');
+}
+
+function confirmReturnToSetup() {
+    closeReturnToSetupModal();
+    closeTimeoutModal();
+    if (setBreakInterval) { clearInterval(setBreakInterval); setBreakInterval = null; }
+    document.getElementById('setBreakModal').classList.add('hidden');
+    closeSubModal();
+    resetToSetup();
 }
 
 function closeSubModal() {
@@ -441,12 +672,19 @@ function switchSides() {
     [state.team1Captain, state.team2Captain] = [state.team2Captain, state.team1Captain];
     [state.team1Libero, state.team2Libero] = [state.team2Libero, state.team1Libero];
     [state.team1OriginalId, state.team2OriginalId] = [state.team2OriginalId, state.team1OriginalId];
+    [state.lastStartingRotation1, state.lastStartingRotation2] = [state.lastStartingRotation2, state.lastStartingRotation1];
 
     state.setHistory = state.setHistory.map(set => ({
         ...set,
         winner: set.winner === 1 ? 2 : 1,
         team1Score: set.team2Score,
-        team2Score: set.team1Score
+        team2Score: set.team1Score,
+        points: (set.points || []).map(p => ({
+            ...p,
+            team: p.team === 1 ? 2 : 1,
+            team1Score: p.team2Score,
+            team2Score: p.team1Score
+        }))
     }));
 }
 
@@ -462,6 +700,7 @@ function swapTeams() {
     [state.team1Subs, state.team2Subs] = [state.team2Subs, state.team1Subs];
     [state.team1LiberoIn, state.team2LiberoIn] = [state.team2LiberoIn, state.team1LiberoIn];
     [state.team1OriginalId, state.team2OriginalId] = [state.team2OriginalId, state.team1OriginalId];
+    [state.lastStartingRotation1, state.lastStartingRotation2] = [state.lastStartingRotation2, state.lastStartingRotation1];
 
     state.serving = state.serving === 1 ? 2 : 1;
     state.firstServer = state.firstServer === 1 ? 2 : 1;
@@ -477,7 +716,13 @@ function swapTeams() {
         ...set,
         winner: set.winner === 1 ? 2 : 1,
         team1Score: set.team2Score,
-        team2Score: set.team1Score
+        team2Score: set.team1Score,
+        points: (set.points || []).map(p => ({
+            ...p,
+            team: p.team === 1 ? 2 : 1,
+            team1Score: p.team2Score,
+            team2Score: p.team1Score
+        }))
     }));
 
     state.pointHistory = state.pointHistory.map(snap => ({
@@ -503,7 +748,13 @@ function swapTeams() {
             ...s,
             winner: s.winner === 1 ? 2 : 1,
             team1Score: s.team2Score,
-            team2Score: s.team1Score
+            team2Score: s.team1Score,
+            points: (s.points || []).map(p => ({
+                ...p,
+                team: p.team === 1 ? 2 : 1,
+                team1Score: p.team2Score,
+                team2Score: p.team1Score
+            }))
         }))
     }));
 
@@ -529,7 +780,7 @@ function startMatch() {
     const errorDiv = document.getElementById('setupError');
     if (errors.length > 0) {
         errorDiv.innerHTML = '<strong>Please fix the following errors:</strong><ul>' +
-            errors.map(e => `<li>${e}</li>`).join('') + '</ul>';
+            errors.map(e => `<li>${escapeHtml(e)}</li>`).join('') + '</ul>';
         errorDiv.classList.remove('hidden');
         return;
     }
@@ -563,12 +814,12 @@ function validateSetup(team1Name, team2Name, team1Players, team2Players, team1Ca
     const errors = [];
 
     const validateTeam = (teamName, players, captain, libero) => {
-        const invalidNumbers = players.filter(n => !isValidInteger(n));
+        const invalidNumbers = players.filter(n => !isValidJersey(n));
         if (invalidNumbers.length > 0) {
-            errors.push(`${teamName}: Invalid jersey number(s): ${invalidNumbers.join(', ')} (must be integers)`);
+            errors.push(`${teamName}: Invalid jersey identifier(s): ${invalidNumbers.join(', ')} (max 3 chars, no HTML special chars)`);
         }
 
-        const validPlayers = players.filter(n => isValidInteger(n));
+        const validPlayers = players.filter(n => isValidJersey(n));
 
         const duplicates = validPlayers.filter((item, index) => validPlayers.indexOf(item) !== index);
         if (duplicates.length > 0) {
@@ -585,16 +836,16 @@ function validateSetup(team1Name, team2Name, team1Players, team2Players, team1Ca
         }
 
         if (captain) {
-            if (!isValidInteger(captain)) {
-                errors.push(`${teamName}: Captain number must be a valid integer`);
+            if (!isValidJersey(captain)) {
+                errors.push(`${teamName}: Captain jersey must be 1–3 characters`);
             } else if (validPlayers.length > 0 && !validPlayers.includes(captain)) {
                 errors.push(`${teamName}: Captain #${captain} is not in the jersey numbers list`);
             }
         }
 
         if (libero) {
-            if (!isValidInteger(libero)) {
-                errors.push(`${teamName}: Libero number must be a valid integer`);
+            if (!isValidJersey(libero)) {
+                errors.push(`${teamName}: Libero jersey must be 1–3 characters`);
             } else if (validPlayers.length > 0 && !validPlayers.includes(libero)) {
                 errors.push(`${teamName}: Libero #${libero} is not in the jersey numbers list`);
             }
@@ -616,11 +867,17 @@ function validateSetup(team1Name, team2Name, team1Players, team2Players, team1Ca
     return errors;
 }
 
-function isValidInteger(value) {
-    if (value === null || value === '') return false;
-    const num = Number(value);
-    return Number.isInteger(num) && num > 0;
+function isValidJersey(value) {
+    const v = String(value).trim();
+    if (v.length === 0) return false;
+    if ([...v].length > 3) return false;
+    return !/[<>&"']/.test(v);
 }
+
+function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 
 function showRotationSetup() {
     document.getElementById('setup').classList.add('hidden');
@@ -644,6 +901,8 @@ function showRotationSetup() {
     header.textContent = 'Set Starting Rotations';
 
     document.getElementById('rotationSetupSetScore').classList.add('hidden');
+    updatePrevRotationButtons();
+    initDragAndDrop();
 }
 
 function showNewSetRotationSetup() {
@@ -669,7 +928,16 @@ function showNewSetRotationSetup() {
 
     const scoreDisplay = document.getElementById('rotationSetupSetScore');
     scoreDisplay.classList.remove('hidden');
-    scoreDisplay.innerHTML = `Match Score: <strong>${state.team1Name}</strong> ${state.team1Sets} - ${state.team2Sets} <strong>${state.team2Name}</strong>`;
+    scoreDisplay.innerHTML = `Match Score: <strong>${escapeHtml(state.team1Name)}</strong> ${state.team1Sets} - ${state.team2Sets} <strong>${escapeHtml(state.team2Name)}</strong>`;
+    updatePrevRotationButtons();
+    initDragAndDrop();
+}
+
+function updatePrevRotationButtons() {
+    const btn1 = document.querySelector('.use-prev-rotation[data-team="1"]');
+    const btn2 = document.querySelector('.use-prev-rotation[data-team="2"]');
+    if (btn1) btn1.style.display = state.lastStartingRotation1 ? '' : 'none';
+    if (btn2) btn2.style.display = state.lastStartingRotation2 ? '' : 'none';
 }
 
 function updateAvailablePlayers(team) {
@@ -681,7 +949,7 @@ function updateAvailablePlayers(team) {
 
     const usedPlayers = Object.values(rotation).filter(p => p !== null);
 
-    let html = '';
+    container.innerHTML = '';
     players.forEach(player => {
         if (player === libero) return;
 
@@ -691,13 +959,13 @@ function updateAvailablePlayers(team) {
         if (isUsed) classes.push('used');
         if (isCaptain) classes.push('captain');
 
-        html += `<span class="${classes.join(' ')}" data-team="${team}" data-player="${player}">${player}</span>`;
-    });
-
-    container.innerHTML = html;
-
-    container.querySelectorAll('.available-player:not(.used)').forEach(el => {
-        el.addEventListener('click', handlePlayerSelect);
+        const el = document.createElement('span');
+        el.className = classes.join(' ');
+        el.dataset.team = team;
+        el.dataset.player = player;
+        el.textContent = player;
+        if (!isUsed) el.addEventListener('click', handlePlayerSelect);
+        container.appendChild(el);
     });
 }
 
@@ -777,7 +1045,7 @@ function confirmRotationSetup() {
     const errorDiv = document.getElementById('rotationSetupError');
     if (errors.length > 0) {
         errorDiv.innerHTML = '<strong>Please fix the following:</strong><ul>' +
-            errors.map(e => `<li>${e}</li>`).join('') + '</ul>';
+            errors.map(e => `<li>${escapeHtml(e)}</li>`).join('') + '</ul>';
         errorDiv.classList.remove('hidden');
         return;
     }
@@ -801,6 +1069,9 @@ function confirmRotationSetup() {
         rotationSetupState.team2Rotation[6]
     ];
 
+    state.lastStartingRotation1 = [...state.team1Rotation];
+    state.lastStartingRotation2 = [...state.team2Rotation];
+
     document.getElementById('rotationSetup').classList.add('hidden');
     
     if (rotationSetupState.isNewSet) {
@@ -816,7 +1087,17 @@ function confirmRotationSetup() {
 }
 
 function beginMatch() {
+    const savedR1 = state.team1Rotation.slice();
+    const savedR2 = state.team2Rotation.slice();
+    const savedHasRotation = state.hasRotation;
+    const savedLast1 = state.lastStartingRotation1;
+    const savedLast2 = state.lastStartingRotation2;
     resetMatchState();
+    state.team1Rotation = savedR1;
+    state.team2Rotation = savedR2;
+    state.hasRotation = savedHasRotation;
+    state.lastStartingRotation1 = savedLast1;
+    state.lastStartingRotation2 = savedLast2;
 
     document.getElementById('setup').classList.add('hidden');
     document.getElementById('rotationSetup').classList.add('hidden');
@@ -850,6 +1131,15 @@ function resetMatchState() {
     state.matchOver = false;
     state.team1OriginalId = 'A';
     state.team2OriginalId = 'B';
+    state.team1Rotation = [];
+    state.team2Rotation = [];
+    state.team1Subs = {};
+    state.team2Subs = {};
+    state.team1LiberoIn = null;
+    state.team2LiberoIn = null;
+    state.hasRotation = false;
+    state.lastStartingRotation1 = null;
+    state.lastStartingRotation2 = null;
 }
 
 function resetToSetup() {
@@ -885,6 +1175,7 @@ function addPoint(team) {
         team2LiberoIn: state.team2LiberoIn
     });
 
+    _scorePulseTeam = team;
     if (team === 1) {
         state.team1Score++;
     } else {
@@ -935,7 +1226,8 @@ function checkSetWin() {
             team1Score: state.team1Score,
             team2Score: state.team2Score,
             winner: setWinner,
-            winnerOriginalId: winnerOriginalId
+            winnerOriginalId: winnerOriginalId,
+            points: [...state.currentSetPoints]
         });
 
         if (setWinner === 1) {
@@ -967,6 +1259,73 @@ function checkSetWin() {
     }
 }
 
+function renderSetChart(set) {
+    const pts = set.points;
+    if (!pts || pts.length < 2) return '';
+
+    const w = 280, dataH = 78, padX = 4, padY = 6, tickZone = 18;
+    const svgH = dataH + tickZone;
+    const allPts = [{ team1Score: 0, team2Score: 0 }, ...pts];
+    const n = allPts.length - 1;
+    const maxScore = Math.max(set.team1Score, set.team2Score, 1);
+
+    const cssStyle = getComputedStyle(document.documentElement);
+    const colorA = cssStyle.getPropertyValue('--team1-color').trim();
+    const colorB = cssStyle.getPropertyValue('--team2-color').trim();
+    const rgbA   = cssStyle.getPropertyValue('--team1-rgb').trim();
+    const rgbB   = cssStyle.getPropertyValue('--team2-rgb').trim();
+    const team1Color = state.team1OriginalId === 'A' ? colorA : colorB;
+    const team1Rgb   = state.team1OriginalId === 'A' ? rgbA   : rgbB;
+    const team2Color = state.team2OriginalId === 'A' ? colorA : colorB;
+    const team2Rgb   = state.team2OriginalId === 'A' ? rgbA   : rgbB;
+
+    const toX = i => (padX + (n > 0 ? (i / n) * (w - 2 * padX) : 0)).toFixed(1);
+    const toY = s => ((dataH - padY) - (s / maxScore) * (dataH - 2 * padY)).toFixed(1);
+
+    // Per-segment lines — trailing team rendered at low opacity each interval
+    let lines1 = '', lines2 = '';
+    for (let i = 1; i <= n; i++) {
+        const prev = allPts[i - 1], cur = allPts[i];
+        const x1 = toX(i - 1), x2 = toX(i);
+        const op1 = prev.team1Score < prev.team2Score ? '0.28' : '1';
+        const op2 = prev.team2Score < prev.team1Score ? '0.28' : '1';
+        lines1 += `<line x1="${x1}" y1="${toY(prev.team1Score)}" x2="${x2}" y2="${toY(cur.team1Score)}" stroke="${team1Color}" stroke-width="2.5" stroke-opacity="${op1}" stroke-linecap="round"/>`;
+        lines2 += `<line x1="${x1}" y1="${toY(prev.team2Score)}" x2="${x2}" y2="${toY(cur.team2Score)}" stroke="${team2Color}" stroke-width="2.5" stroke-opacity="${op2}" stroke-linecap="round"/>`;
+    }
+
+    // Score markers — tick at each 5-point score milestone (labels show score, not rally count)
+    let ticks = '';
+    for (let score = 5; score <= maxScore; score += 5) {
+        const idx = allPts.findIndex(p => Math.max(p.team1Score, p.team2Score) >= score);
+        if (idx > 0) {
+            const x = toX(idx);
+            ticks += `<line x1="${x}" y1="${dataH - 1}" x2="${x}" y2="${dataH + 4}" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>`;
+            ticks += `<text x="${x}" y="${svgH - 2}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.38)" font-family="Barlow Semi Condensed,sans-serif">${score}</text>`;
+        }
+    }
+
+    const winnerOriginalId = set.winnerOriginalId || (set.winner === 1 ? 'A' : 'B');
+    const winLabel = winnerOriginalId === state.team1OriginalId ? state.team1Name : state.team2Name;
+    const winColor = winnerOriginalId === state.team1OriginalId ? team1Color : team2Color;
+
+    return `
+        <div class="set-chart-wrap">
+            <div class="set-chart-header">
+                <span class="set-chart-label">Set ${set.set}</span>
+                <span class="set-chart-score">${set.team1Score} – ${set.team2Score}</span>
+                <span class="set-chart-winner" style="color:${winColor}">${escapeHtml(winLabel)}</span>
+            </div>
+            <svg viewBox="0 0 ${w} ${svgH}" class="set-chart" preserveAspectRatio="none">
+                ${lines1}${lines2}${ticks}
+            </svg>
+            <div class="set-chart-axis">
+                <span style="color:${team1Color}">${escapeHtml(state.team1Name)}</span>
+                <span style="color:${team2Color}">${escapeHtml(state.team2Name)}</span>
+            </div>
+        </div>
+    `;
+}
+
 function endMatch() {
     state.matchOver = true;
     const winner = state.team1Sets > state.team2Sets ? state.team1Name : state.team2Name;
@@ -976,13 +1335,24 @@ function endMatch() {
 
     document.getElementById('winner').textContent = `${winner} Wins!`;
 
-    let scoreHTML = `<div>Final: ${state.team1Sets} - ${state.team2Sets}</div>`;
-    scoreHTML += '<div style="margin-top: 15px;">';
+    const totalT1 = state.setHistory.reduce((a, s) => a + s.team1Score, 0);
+    const totalT2 = state.setHistory.reduce((a, s) => a + s.team2Score, 0);
+
+    let scoreHTML = `<div class="final-summary">Final: ${state.team1Sets} – ${state.team2Sets}</div>`;
+    scoreHTML += `<div class="total-points">${escapeHtml(state.team1Name)} ${totalT1} pts &nbsp;·&nbsp; ${escapeHtml(state.team2Name)} ${totalT2} pts</div>`;
+    scoreHTML += '<div class="set-results-row">';
     state.setHistory.forEach(set => {
         const winnerClass = set.winner === 1 ? 'team1-win' : 'team2-win';
         scoreHTML += `<span class="set-result ${winnerClass}">Set ${set.set}: ${set.team1Score}-${set.team2Score}</span>`;
     });
     scoreHTML += '</div>';
+
+    scoreHTML += '<div class="set-charts">';
+    state.setHistory.forEach(set => {
+        scoreHTML += renderSetChart(set);
+    });
+    scoreHTML += '</div>';
+
     document.getElementById('finalScore').innerHTML = scoreHTML;
 }
 
@@ -1056,20 +1426,19 @@ function updateRotationDisplay(team, rotation, captain, libero, isServing) {
 function updateRotationSetupColors() {
     const rotationTeam1Name = document.getElementById('rotationTeam1Name');
     const rotationTeam2Name = document.getElementById('rotationTeam2Name');
-    
+
     if (!rotationTeam1Name || !rotationTeam2Name) return;
-    
-    // Team A is blue (#667eea), Team B is red (#f5576c)
-    const blueColor = '#667eea';
-    const redColor = '#f5576c';
-    
-    // Apply colors based on original team identity
+
+    const style = getComputedStyle(document.documentElement);
+    const team1Color = style.getPropertyValue('--team1-color').trim();
+    const team2Color = style.getPropertyValue('--team2-color').trim();
+
     if (state.team1OriginalId === 'A') {
-        rotationTeam1Name.style.color = blueColor;
-        rotationTeam2Name.style.color = redColor;
+        rotationTeam1Name.style.color = team1Color;
+        rotationTeam2Name.style.color = team2Color;
     } else {
-        rotationTeam1Name.style.color = redColor;
-        rotationTeam2Name.style.color = blueColor;
+        rotationTeam1Name.style.color = team2Color;
+        rotationTeam2Name.style.color = team1Color;
     }
 }
 
@@ -1081,41 +1450,51 @@ function updateTeamColors() {
     const timeline1 = document.querySelector('.timeline-team:first-child');
     const timeline2 = document.querySelector('.timeline-team:last-child');
     
-    // Team A is blue (#667eea), Team B is red (#f5576c)
-    const blueColor = '#667eea';
-    const redColor = '#f5576c';
-    
-    // Apply colors based on original team identity, not position
+    const cssStyle = getComputedStyle(document.documentElement);
+    const team1Color = cssStyle.getPropertyValue('--team1-color').trim();
+    const team2Color = cssStyle.getPropertyValue('--team2-color').trim();
+
+    const team1RgbVal = cssStyle.getPropertyValue('--team1-rgb').trim();
+    const team2RgbVal = cssStyle.getPropertyValue('--team2-rgb').trim();
+
+    const applyTeamStyle = (container, scoreEl, color, rgbVal, timelineEl, timelineClass) => {
+        container.style.borderColor = color;
+        container.style.boxShadow = `inset 0 0 30px rgba(${rgbVal}, 0.06), 0 0 0 1px rgba(${rgbVal}, 0.08)`;
+        container.style.setProperty('--this-team-rgb', rgbVal);
+        scoreEl.style.color = color;
+        scoreEl.style.textShadow = `0 0 32px rgba(${rgbVal}, 0.4)`;
+        if (timelineEl) timelineEl.setAttribute('data-team-color', timelineClass);
+    };
+
     if (state.team1OriginalId === 'A') {
-        // Team A is in position 1 (left)
-        team1Container.style.borderColor = blueColor;
-        team1ScoreEl.style.color = blueColor;
-        team2Container.style.borderColor = redColor;
-        team2ScoreEl.style.color = redColor;
-        
-        // Update timeline colors
-        if (timeline1) timeline1.setAttribute('data-team-color', 'blue');
-        if (timeline2) timeline2.setAttribute('data-team-color', 'red');
+        applyTeamStyle(team1Container, team1ScoreEl, team1Color, team1RgbVal, timeline1, 'team1');
+        applyTeamStyle(team2Container, team2ScoreEl, team2Color, team2RgbVal, timeline2, 'team2');
     } else {
-        // Team B is in position 1 (left), Team A is in position 2 (right)
-        team1Container.style.borderColor = redColor;
-        team1ScoreEl.style.color = redColor;
-        team2Container.style.borderColor = blueColor;
-        team2ScoreEl.style.color = blueColor;
-        
-        // Update timeline colors
-        if (timeline1) timeline1.setAttribute('data-team-color', 'red');
-        if (timeline2) timeline2.setAttribute('data-team-color', 'blue');
+        applyTeamStyle(team1Container, team1ScoreEl, team2Color, team2RgbVal, timeline1, 'team2');
+        applyTeamStyle(team2Container, team2ScoreEl, team1Color, team1RgbVal, timeline2, 'team1');
     }
+}
+
+function pulseScore(el) {
+    el.classList.remove('pulse');
+    void el.offsetWidth;
+    el.classList.add('pulse');
+    el.addEventListener('animationend', () => el.classList.remove('pulse'), { once: true });
 }
 
 function updateDisplay() {
     updateTeamColors();
-    
+
     document.getElementById('team1Display').textContent = state.team1Name;
     document.getElementById('team2Display').textContent = state.team2Name;
-    document.getElementById('team1Score').textContent = state.team1Score;
-    document.getElementById('team2Score').textContent = state.team2Score;
+
+    const t1El = document.getElementById('team1Score');
+    const t2El = document.getElementById('team2Score');
+    t1El.textContent = state.team1Score;
+    t2El.textContent = state.team2Score;
+    if (_scorePulseTeam === 1) pulseScore(t1El);
+    else if (_scorePulseTeam === 2) pulseScore(t2El);
+    _scorePulseTeam = null;
     let setsHTML = '';
     if (state.setHistory.length === 0) {
         setsHTML = '<span class="no-sets">No sets completed</span>';
