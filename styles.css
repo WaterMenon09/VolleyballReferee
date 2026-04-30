@@ -765,6 +765,10 @@ h1 {
     justify-content: center;
 }
 
+.use-prev-rotation {
+    margin-top: 10px;
+}
+
 .available-player {
     width: 42px;
     height: 42px;
