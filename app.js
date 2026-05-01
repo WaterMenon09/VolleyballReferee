@@ -33,7 +33,8 @@ const state = {
     team2OriginalId: 'B',
     lastStartingRotation1: null,
     lastStartingRotation2: null,
-    matchStarted: false
+    matchStarted: false,
+    deciderSideSwitched: false
 };
 
 const rotationSetupState = {
@@ -54,6 +55,8 @@ const TIMER_CIRCLE_CIRCUMFERENCE = 2 * Math.PI * TIMER_CIRCLE_RADIUS;
 
 let timeoutInterval = null;
 let setBreakInterval = null;
+let vibrateInterval = null;
+let _alertContentEl = null;
 let _scorePulseTeam = null;
 let _dndInitialized = false;
 let _restoredRotationSetup = null;
@@ -296,6 +299,8 @@ function restoreSavedMatch() {
     // matchStarted covers no-jersey matches; team1Players.length covers old saves from jersey matches
     const inProgress = state.matchStarted || state.team1Players.length > 0;
 
+    let onScoreboard = false;
+
     if (state.matchOver) {
         endMatch();
     } else if (!inProgress) {
@@ -313,6 +318,7 @@ function restoreSavedMatch() {
         document.getElementById('rotation1').classList.remove('hidden');
         document.getElementById('rotation2').classList.remove('hidden');
         updateDisplay();
+        onScoreboard = true;
     } else if (state.hasRotation) {
         _restoredRotationSetup = savedRS || null;
         showNewSetRotationSetup();
@@ -324,7 +330,15 @@ function restoreSavedMatch() {
         document.getElementById('rotation1').classList.add('hidden');
         document.getElementById('rotation2').classList.add('hidden');
         updateDisplay();
+        onScoreboard = true;
     }
+
+    if (onScoreboard && !state.matchOver && !state.deciderSideSwitched
+            && getPointsToWin() === FINAL_SET_POINTS
+            && (state.team1Score >= 8 || state.team2Score >= 8)) {
+        showDeciderSwitchModal();
+    }
+
     return true;
 }
 
@@ -386,6 +400,7 @@ function init() {
     document.getElementById('returnToSetup').addEventListener('click', showReturnToSetupModal);
     document.getElementById('cancelReturnToSetup').addEventListener('click', closeReturnToSetupModal);
     document.getElementById('confirmReturnToSetup').addEventListener('click', confirmReturnToSetup);
+    document.getElementById('confirmDeciderSwitch').addEventListener('click', closeDeciderSwitchModal);
 
     document.querySelectorAll('.rotation-setup-pos').forEach(pos => {
         pos.addEventListener('click', handlePositionClick);
@@ -473,13 +488,13 @@ function showTimeoutModal(teamName) {
     modal.classList.remove('hidden');
 
     const timeoutDurationMs = TIMEOUT_DURATION * 1000;
-    let timeLeft = timeoutDurationMs;
+    const startTime = performance.now();
     timerProgress.style.strokeDashoffset = 0;
 
     const updateInterval = 10;
 
     timeoutInterval = setInterval(() => {
-        timeLeft -= updateInterval;
+        const timeLeft = Math.max(0, timeoutDurationMs - (performance.now() - startTime));
 
         const seconds = Math.floor(timeLeft / 1000);
         const milliseconds = Math.floor((timeLeft % 1000) / 10);
@@ -490,12 +505,15 @@ function showTimeoutModal(teamName) {
 
         if (timeLeft <= 0) {
             timerText.textContent = '0.00';
-            closeTimeoutModal();
+            clearInterval(timeoutInterval);
+            timeoutInterval = null;
+            shakeModal(modal.querySelector('.modal-content'));
         }
     }, updateInterval);
 }
 
 function closeTimeoutModal() {
+    stopRepeatingVibration();
     const modal = document.getElementById('timeoutModal');
     modal.classList.add('hidden');
 
@@ -518,13 +536,13 @@ function showSetBreakModal(setNumber) {
     modal.classList.remove('hidden');
 
     const setBreakDurationMs = SET_BREAK_DURATION * 1000;
-    let timeLeft = setBreakDurationMs;
+    const startTime = performance.now();
     timerProgress.style.strokeDashoffset = 0;
 
     const updateInterval = 100; // Update every 100ms for second-level precision
 
     setBreakInterval = setInterval(() => {
-        timeLeft -= updateInterval;
+        const timeLeft = Math.max(0, setBreakDurationMs - (performance.now() - startTime));
 
         // Format as mm:ss
         const totalSeconds = Math.floor(timeLeft / 1000);
@@ -537,12 +555,15 @@ function showSetBreakModal(setNumber) {
 
         if (timeLeft <= 0) {
             timerText.textContent = '0:00';
-            closeSetBreakModal();
+            clearInterval(setBreakInterval);
+            setBreakInterval = null;
+            shakeModal(modal.querySelector('.modal-content'));
         }
     }, updateInterval);
 }
 
 function closeSetBreakModal() {
+    stopRepeatingVibration();
     const modal = document.getElementById('setBreakModal');
     modal.classList.add('hidden');
 
@@ -738,10 +759,12 @@ function closeReturnToSetupModal() {
 }
 
 function confirmReturnToSetup() {
+    stopRepeatingVibration();
     closeReturnToSetupModal();
     closeTimeoutModal();
     if (setBreakInterval) { clearInterval(setBreakInterval); setBreakInterval = null; }
     document.getElementById('setBreakModal').classList.add('hidden');
+    document.getElementById('deciderSwitchModal').classList.add('hidden');
     closeSubModal();
     resetToSetup();
 }
@@ -917,6 +940,37 @@ function swapTeams() {
     updateDisplay();
 }
 
+function maybeTriggerDeciderSwitch() {
+    if (state.deciderSideSwitched) return;
+    if (state.matchOver) return;
+    if (getPointsToWin() !== FINAL_SET_POINTS) return;
+    if (state.team1Score < 8 && state.team2Score < 8) return;
+    showDeciderSwitchModal();
+}
+
+function showDeciderSwitchModal() {
+    const scoreEl = document.getElementById('deciderSwitchScore');
+    const cs = getComputedStyle(document.documentElement);
+    const colorA = cs.getPropertyValue('--team1-color').trim();
+    const colorB = cs.getPropertyValue('--team2-color').trim();
+    const t1Color = state.team1OriginalId === 'A' ? colorA : colorB;
+    const t2Color = state.team2OriginalId === 'A' ? colorA : colorB;
+    scoreEl.innerHTML =
+        `<span style="color:${t1Color}">${escapeHtml(state.team1Name)} ${state.team1Score}</span>` +
+        ` <span class="decider-switch-sep">·</span> ` +
+        `<span style="color:${t2Color}">${escapeHtml(state.team2Name)} ${state.team2Score}</span>`;
+    vibrateDevice([300, 100, 300, 100, 500]);
+    document.getElementById('deciderSwitchModal').classList.remove('hidden');
+}
+
+function closeDeciderSwitchModal() {
+    const modal = document.getElementById('deciderSwitchModal');
+    if (modal.classList.contains('hidden')) return;
+    state.deciderSideSwitched = true;
+    modal.classList.add('hidden');
+    swapTeams();
+}
+
 function startMatch() {
     const team1Name = document.getElementById('team1Name').value || 'Team A';
     const team2Name = document.getElementById('team2Name').value || 'Team B';
@@ -1033,6 +1087,39 @@ function isValidJersey(value) {
 
 function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function vibrateDevice(pattern) {
+    try {
+        if (navigator.vibrate) navigator.vibrate(pattern);
+    } catch (_) {}
+}
+
+function stopRepeatingVibration() {
+    if (vibrateInterval) {
+        clearInterval(vibrateInterval);
+        vibrateInterval = null;
+    }
+    try { if (navigator.vibrate) navigator.vibrate(0); } catch (_) {}
+    if (_alertContentEl) {
+        _alertContentEl.classList.remove('modal-shake');
+        _alertContentEl = null;
+    }
+}
+
+function shakeModal(contentEl) {
+    stopRepeatingVibration();
+    _alertContentEl = contentEl;
+
+    function pulse() {
+        try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
+        contentEl.classList.remove('modal-shake');
+        void contentEl.offsetWidth;
+        contentEl.classList.add('modal-shake');
+    }
+
+    pulse();
+    vibrateInterval = setInterval(pulse, 1500);
 }
 
 
@@ -1325,6 +1412,7 @@ function resetMatchState() {
     state.lastStartingRotation1 = null;
     state.lastStartingRotation2 = null;
     state.matchStarted = false;
+    state.deciderSideSwitched = false;
     _restoredRotationSetup = null;
 }
 
@@ -1389,6 +1477,7 @@ function addPoint(team) {
 
     checkSetWin();
     updateDisplay();
+    maybeTriggerDeciderSwitch();
 }
 
 function checkSetWin() {
@@ -1456,6 +1545,7 @@ function checkSetWin() {
             state.currentSetPoints = [];
             state.serving = (state.currentSet % 2 === 1) ? 1 : 2;
             state.firstServer = state.serving;
+            state.deciderSideSwitched = false;
 
             switchSides();
 

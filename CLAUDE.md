@@ -31,7 +31,7 @@ Four views are shown/hidden by toggling the `hidden` class on their container di
 3. `#scoreboard` — active game screen
 4. `#matchResult` — post-match result
 
-Four modals are used across screens: `#subModal` (player substitution, overlays scoreboard), `#timeoutModal` (30-second countdown, overlays scoreboard), `#setBreakModal` (3-minute set break timer, shown between sets), and `#returnToSetupModal` (confirmation dialog for returning to setup mid-match).
+Five modals are used across screens: `#subModal` (player substitution, overlays scoreboard), `#timeoutModal` (30-second countdown, overlays scoreboard), `#setBreakModal` (3-minute set break timer, shown between sets), `#returnToSetupModal` (confirmation dialog for returning to setup mid-match), and `#deciderSwitchModal` (side-switch notification at 8 points in the deciding set).
 
 ### State management
 
@@ -78,6 +78,30 @@ When a set ends, `checkSetWin()` calls `showSetBreakModal(nextSetNumber)` which 
 
 `sw.js` — service worker. Cache name is `vbref-v${VERSION}`; **bump `VERSION` in `sw.js` to invalidate all clients on the next deploy** and force re-download of updated assets. `APP_SHELL` lists every file precached at install — **add new CSS, JS, or icon files here or they will not be available offline**. HTML navigations use network-first (fresh on online reload, cached fallback offline). All other same-origin assets use cache-first. Cross-origin requests (Google Fonts, Analytics) are not intercepted and not cached — they silently fail offline, which is acceptable.
 
+### Deciding-set side switch
+
+`state.deciderSideSwitched` (boolean, persisted) tracks whether the mid-set side switch has fired in the current deciding set. When either team reaches 8 points in a 15-point final set, `maybeTriggerDeciderSwitch()` fires `showDeciderSwitchModal()`. On confirm, `closeDeciderSwitchModal()` sets the flag to `true` then calls `swapTeams()`. The flag is reset in `resetMatchState()` and in the set-transition branch of `checkSetWin()`. It is intentionally **not** included in `pointHistory` snapshots — it is sticky for the set, so undoing the trigger point reverts the score but keeps the swap in place (same semantics as the manual swap button).
+
 ### Match state persistence
 
 The full `state` object is serialized to localStorage under the key `vb-match-state` after every `updateDisplay()` call. On `init()`, `restoreSavedMatch()` reads it and routes the user back to the correct screen (scoreboard / rotation setup / match result). Stored under a `_schema` version field — bump `STORAGE_SCHEMA` when the state shape changes in a way that breaks restore, and stale data is silently dropped. `resetMatchState()` clears the stored state so a "Return to Setup" reliably starts fresh. Timer intervals (timeout countdown, set break) live in module-level vars, not in state — they are NOT restored, so a timeout interrupted by reload simply ends.
+
+## Code Review Checklist
+
+Every code review for this repo **must** verify UI across all of these viewports:
+
+| Viewport | Dimensions |
+|---|---|
+| Desktop | 1280 × 800 (or wider) |
+| Tablet landscape | 1024 × 768 |
+| Tablet portrait | 768 × 1024 |
+| Mobile portrait | 390 × 844 (iPhone 14 proxy) |
+| Mobile landscape | 844 × 390 |
+| Small phone | 375 × 667 (iPhone SE proxy) |
+
+For each affected screen/modal, confirm:
+- No overflow or horizontal scroll
+- Touch targets are large enough (≥ 44px)
+- Text is readable (no truncation, no overlap)
+- Modals are fully visible and scrollable if needed
+- Buttons and interactive elements are reachable (not clipped by safe-area or other elements)
