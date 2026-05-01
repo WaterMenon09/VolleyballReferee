@@ -1,0 +1,15 @@
+{
+  "name": "Volleyball Referee",
+  "short_name": "VB Ref",
+  "description": "Volleyball scoresheet for tracking matches, rotations, substitutions, and more.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#071545",
+  "theme_color": "#071545",
+  "icons": [
+    { "src": "icons/volleyball.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/volleyball.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

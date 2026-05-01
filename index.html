@@ -14,6 +14,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="description" content="Volleyball scoresheet for tracking matches, rotations, substitutions, and more.">
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-RBPL9H3D0Y"></script>
     <script>
@@ -311,8 +313,15 @@
         </div>
     </div>
 
-    <footer class="credits">v3.0 | Created by Menon Pranto</footer>
+    <footer class="credits">v3.01 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(() => {});
+        });
+      }
+    </script>
 </body>
 </html>

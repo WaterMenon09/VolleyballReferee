@@ -123,6 +123,7 @@ The app is fully responsive and optimized for:
 
 ## Version History
 
+- **v3.01** - PWA support: installable to home screen, full offline capability via service worker
 - **v3.0** - Drag-and-drop rotation assignment; customizable team colors; letter/emoji jerseys; lead-margin charts; total points; return-to-setup mid-match; "use previous rotation" button; polished indoor arena theme
 - **v2.01** - Optimized landscape mode for mobile phones, reduced scrolling
 - **v1.7** - Added live demo link and GitHub Actions deployment
