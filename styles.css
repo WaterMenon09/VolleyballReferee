@@ -1486,6 +1486,10 @@ h1 {
         height: 26px;
     }
 
+    .serve-ball.right {
+        left: calc(100% - 30px);
+    }
+
     .sets-score-center {
         gap: 4px;
     }
@@ -1753,6 +1757,10 @@ h1 {
     .serve-ball {
         width: 20px;
         height: 20px;
+    }
+
+    .serve-ball.right {
+        left: calc(100% - 24px);
     }
 
     .sets-score-center {
@@ -2261,4 +2269,164 @@ h1 {
 @keyframes modalIn {
     from { opacity: 0; transform: scale(0.94) translateY(8px); }
     to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── History Button ──────────────────────────────────────────────────────── */
+
+.history-btn {
+    position: fixed;
+    top: max(14px, env(safe-area-inset-top, 0px));
+    right: max(14px, env(safe-area-inset-right, 0px));
+    z-index: 500;
+    padding: 8px 16px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--court-gold);
+    background: rgba(245, 200, 66, 0.1);
+    border: 1px solid rgba(245, 200, 66, 0.35);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, transform 0.12s;
+}
+
+.history-btn:hover {
+    background: rgba(245, 200, 66, 0.2);
+    border-color: rgba(245, 200, 66, 0.6);
+    transform: translateY(-1px);
+}
+
+.history-btn:active {
+    transform: translateY(0);
+}
+
+/* ── History Modal ───────────────────────────────────────────────────────── */
+
+.history-modal-content {
+    text-align: left;
+    max-width: 520px;
+    width: 100%;
+    padding: 36px 36px 28px;
+}
+
+.history-modal-content h2 {
+    text-align: center;
+}
+
+.history-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    margin-bottom: 24px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(245, 200, 66, 0.3) transparent;
+}
+
+.history-list::-webkit-scrollbar { width: 4px; }
+.history-list::-webkit-scrollbar-track { background: transparent; }
+.history-list::-webkit-scrollbar-thumb {
+    background: rgba(245, 200, 66, 0.3);
+    border-radius: 2px;
+}
+
+.history-empty {
+    text-align: center;
+    color: var(--court-cream-off);
+    font-size: 0.95rem;
+    padding: 20px 0;
+}
+
+.history-entry {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    transition: background 0.15s;
+}
+
+.history-entry:last-child { margin-bottom: 0; }
+.history-entry:hover { background: rgba(255, 255, 255, 0.07); }
+
+.history-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+}
+
+.history-winner {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 1.1rem;
+    letter-spacing: 0.06em;
+    color: var(--court-gold);
+}
+
+.history-date {
+    font-size: 0.72rem;
+    color: var(--court-cream-off);
+    letter-spacing: 0.02em;
+}
+
+.history-teams {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.history-team-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--court-cream-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-team-name:last-child { text-align: right; }
+
+.history-sets-tally {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    letter-spacing: 0.06em;
+    color: var(--court-cream);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.history-set-scores {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.history-set-score {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+}
+
+.hist-team1-win {
+    background: rgba(var(--team1-rgb), 0.18);
+    color: var(--team1-color);
+    border: 1px solid rgba(var(--team1-rgb), 0.3);
+}
+
+.hist-team2-win {
+    background: rgba(var(--team2-rgb), 0.18);
+    color: var(--team2-color);
+    border: 1px solid rgba(var(--team2-rgb), 0.3);
+}
+
+.history-modal-content .btn-secondary {
+    display: block;
+    margin: 0 auto;
+    min-width: 120px;
 }

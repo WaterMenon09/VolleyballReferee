@@ -56,29 +56,62 @@ let timeoutInterval = null;
 let setBreakInterval = null;
 let _scorePulseTeam = null;
 let _dndInitialized = false;
+let _restoredRotationSetup = null;
 
 const STORAGE_KEY = 'vb-match-state';
 const STORAGE_SCHEMA = 1;
+const HISTORY_KEY = 'vb-match-history';
+const HISTORY_MAX = 50;
 
 function saveState() {
     try {
-        const payload = { _schema: STORAGE_SCHEMA, state };
+        const payload = { _schema: STORAGE_SCHEMA, state, rotationSetup: { ...rotationSetupState } };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (_) {}
+}
+
+// Extension point for schema upgrades. Add a case per version step.
+// Each call must advance _schema by exactly one step (fromVersion → fromVersion+1).
+// Return the upgraded payload { _schema, state, rotationSetup } or null to discard.
+function migrate(saved, fromVersion) {
+    // no migrations defined yet
+    return null;
 }
 
 function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (parsed?._schema !== STORAGE_SCHEMA) { clearState(); return null; }
-        return parsed.state || null;
+        let cur = JSON.parse(raw);
+        while (cur?._schema !== STORAGE_SCHEMA) {
+            const next = migrate(cur, cur?._schema);
+            if (!next || next._schema === cur._schema) { clearState(); return null; }
+            cur = next;
+        }
+        return { state: cur.state || null, rotationSetup: cur.rotationSetup || null };
     } catch (_) { return null; }
 }
 
 function clearState() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+}
+
+function saveMatchToHistory(matchData) {
+    try {
+        const history = loadMatchHistory();
+        history.unshift(matchData);
+        if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch (_) {}
+}
+
+function loadMatchHistory() {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
 }
 
 function initDragAndDrop() {
@@ -206,6 +239,7 @@ function initDragAndDrop() {
                         setPlayer(dragTeam, dragFromPos, displaced);
                     }
                     refreshUI(dragTeam);
+                    saveState();
                 }
             }
         }
@@ -253,8 +287,9 @@ function applyTeamColors(c1, c2) {
 }
 
 function restoreSavedMatch() {
-    const saved = loadState();
-    if (!saved) return false;
+    const loaded = loadState();
+    if (!loaded) return false;
+    const { state: saved, rotationSetup: savedRS } = loaded;
 
     Object.assign(state, saved);
 
@@ -265,6 +300,11 @@ function restoreSavedMatch() {
         endMatch();
     } else if (!inProgress) {
         return false;
+    } else if (state.team1Players.length > 0 && state.hasRotation && (!Array.isArray(state.team1Rotation) || state.team1Rotation.length === 0) && !state.matchStarted) {
+        // reloaded mid-first-set rotation setup
+        _restoredRotationSetup = savedRS || null;
+        showRotationSetup();
+        return true;
     } else if (state.hasRotation && state.team1Rotation.length === 6) {
         document.getElementById('setup').classList.add('hidden');
         document.getElementById('rotationSetup').classList.add('hidden');
@@ -274,6 +314,7 @@ function restoreSavedMatch() {
         document.getElementById('rotation2').classList.remove('hidden');
         updateDisplay();
     } else if (state.hasRotation) {
+        _restoredRotationSetup = savedRS || null;
         showNewSetRotationSetup();
     } else {
         document.getElementById('setup').classList.add('hidden');
@@ -319,6 +360,12 @@ function init() {
     document.getElementById('startMatch').addEventListener('click', startMatch);
     document.getElementById('playAgain').addEventListener('click', resetToSetup);
     document.getElementById('undoPoint').addEventListener('click', undoLastPoint);
+    document.getElementById('historyBtn').addEventListener('click', showHistoryModal);
+    document.getElementById('closeHistory').addEventListener('click', closeHistoryModal);
+    document.getElementById('historyModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('historyModal')) closeHistoryModal();
+    });
+    updateHistoryButton();
 
     document.querySelectorAll('.btn-score').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -360,6 +407,7 @@ function init() {
             rotationSetupState.selectedPosition = null;
             rotationSetupState.selectedTeam = null;
             document.querySelectorAll('.rotation-setup-pos').forEach(p => p.classList.remove('selected'));
+            saveState();
         });
     });
 
@@ -704,6 +752,52 @@ function closeSubModal() {
     currentSubPosition = null;
 }
 
+function showHistoryModal() {
+    const history = loadMatchHistory();
+    const listEl = document.getElementById('historyList');
+
+    if (history.length === 0) {
+        listEl.innerHTML = '<p class="history-empty">No completed matches yet.</p>';
+    } else {
+        listEl.innerHTML = history.map(entry => {
+            const date = new Date(entry.finishedAt);
+            const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+            const setsHTML = (entry.setHistory || []).map(s => {
+                const wc = s.winner === 1 ? (entry.team1Color || '#4a9eff') : (entry.team2Color || '#f5a623');
+                const wr = s.winner === 1 ? (entry.team1Rgb || '74,158,255') : (entry.team2Rgb || '245,166,35');
+                const ps = `background:rgba(${wr},0.18);color:${wc};border:1px solid rgba(${wr},0.3);`;
+                return `<span class="history-set-score" style="${ps}">${s.team1Score}–${s.team2Score}</span>`;
+            }).join('');
+            return `
+                <div class="history-entry">
+                    <div class="history-entry-header">
+                        <span class="history-winner">${escapeHtml(entry.winner)}</span>
+                        <span class="history-date">${dateStr} · ${timeStr}</span>
+                    </div>
+                    <div class="history-teams">
+                        <span class="history-team-name">${escapeHtml(entry.team1Name)}</span>
+                        <span class="history-sets-tally">${entry.team1Sets} – ${entry.team2Sets}</span>
+                        <span class="history-team-name">${escapeHtml(entry.team2Name)}</span>
+                    </div>
+                    <div class="history-set-scores">${setsHTML}</div>
+                </div>`;
+        }).join('');
+    }
+
+    document.getElementById('historyModal').classList.remove('hidden');
+}
+
+function closeHistoryModal() {
+    document.getElementById('historyModal').classList.add('hidden');
+}
+
+function updateHistoryButton() {
+    const btn = document.getElementById('historyBtn');
+    if (!btn) return;
+    btn.style.display = loadMatchHistory().length > 0 ? '' : 'none';
+}
+
 function checkLiberoFrontRow(team) {
     const libero = team === 1 ? state.team1Libero : state.team2Libero;
     const rotation = team === 1 ? state.team1Rotation : state.team2Rotation;
@@ -863,6 +957,7 @@ function startMatch() {
 
     if (team1Players.length >= 6 && team2Players.length >= 6) {
         state.hasRotation = true;
+        saveState();
         showRotationSetup();
     } else {
         state.hasRotation = false;
@@ -954,6 +1049,14 @@ function showRotationSetup() {
     rotationSetupState.selectedTeam = null;
     rotationSetupState.isNewSet = false;
 
+    if (_restoredRotationSetup && !_restoredRotationSetup.isNewSet) {
+        Object.assign(rotationSetupState, _restoredRotationSetup);
+        rotationSetupState.selectedPosition = null;
+        rotationSetupState.selectedTeam = null;
+        _restoredRotationSetup = null;
+    }
+    saveState();
+
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
     updateRotationSetupDisplay();
@@ -982,6 +1085,14 @@ function showNewSetRotationSetup() {
     rotationSetupState.selectedPosition = null;
     rotationSetupState.selectedTeam = null;
     rotationSetupState.isNewSet = true;
+
+    if (_restoredRotationSetup && _restoredRotationSetup.isNewSet) {
+        Object.assign(rotationSetupState, _restoredRotationSetup);
+        rotationSetupState.selectedPosition = null;
+        rotationSetupState.selectedTeam = null;
+        _restoredRotationSetup = null;
+    }
+    saveState();
 
     updateAvailablePlayers(1);
     updateAvailablePlayers(2);
@@ -1047,12 +1158,14 @@ function handlePositionClick(e) {
         rotationSetupState.selectedTeam = null;
         updateAvailablePlayers(team);
         updateRotationSetupDisplay();
+        saveState();
         return;
     }
 
     e.target.classList.add('selected');
     rotationSetupState.selectedPosition = pos;
     rotationSetupState.selectedTeam = team;
+    saveState();
 }
 
 function handlePlayerSelect(e) {
@@ -1072,6 +1185,7 @@ function handlePlayerSelect(e) {
     document.querySelectorAll('.rotation-setup-pos').forEach(p => p.classList.remove('selected'));
     updateAvailablePlayers(team);
     updateRotationSetupDisplay();
+    saveState();
 }
 
 function updateRotationSetupDisplay() {
@@ -1136,6 +1250,9 @@ function confirmRotationSetup() {
 
     state.lastStartingRotation1 = [...state.team1Rotation];
     state.lastStartingRotation2 = [...state.team2Rotation];
+
+    rotationSetupState.team1Rotation = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
+    rotationSetupState.team2Rotation = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
 
     document.getElementById('rotationSetup').classList.add('hidden');
     
@@ -1208,6 +1325,7 @@ function resetMatchState() {
     state.lastStartingRotation1 = null;
     state.lastStartingRotation2 = null;
     state.matchStarted = false;
+    _restoredRotationSetup = null;
 }
 
 function resetToSetup() {
@@ -1305,6 +1423,25 @@ function checkSetWin() {
         }
 
         if (state.team1Sets >= state.setsToWin || state.team2Sets >= state.setsToWin) {
+            const _cs = getComputedStyle(document.documentElement);
+            const _colorA = _cs.getPropertyValue('--team1-color').trim();
+            const _colorB = _cs.getPropertyValue('--team2-color').trim();
+            const _rgbA   = _cs.getPropertyValue('--team1-rgb').trim();
+            const _rgbB   = _cs.getPropertyValue('--team2-rgb').trim();
+            saveMatchToHistory({
+                finishedAt: Date.now(),
+                team1Name: state.team1Name,
+                team2Name: state.team2Name,
+                team1Sets: state.team1Sets,
+                team2Sets: state.team2Sets,
+                winner: state.team1Sets > state.team2Sets ? state.team1Name : state.team2Name,
+                team1Color: state.team1OriginalId === 'A' ? _colorA : _colorB,
+                team2Color: state.team2OriginalId === 'A' ? _colorA : _colorB,
+                team1Rgb:   state.team1OriginalId === 'A' ? _rgbA   : _rgbB,
+                team2Rgb:   state.team2OriginalId === 'A' ? _rgbA   : _rgbB,
+                setHistory: state.setHistory.map(s => ({ team1Score: s.team1Score, team2Score: s.team2Score, winner: s.winner }))
+            });
+            updateHistoryButton();
             endMatch();
         } else {
             state.currentSet++;
