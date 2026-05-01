@@ -32,7 +32,8 @@ const state = {
     team1OriginalId: 'A',
     team2OriginalId: 'B',
     lastStartingRotation1: null,
-    lastStartingRotation2: null
+    lastStartingRotation2: null,
+    matchStarted: false
 };
 
 const rotationSetupState = {
@@ -55,6 +56,30 @@ let timeoutInterval = null;
 let setBreakInterval = null;
 let _scorePulseTeam = null;
 let _dndInitialized = false;
+
+const STORAGE_KEY = 'vb-match-state';
+const STORAGE_SCHEMA = 1;
+
+function saveState() {
+    try {
+        const payload = { _schema: STORAGE_SCHEMA, state };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (_) {}
+}
+
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed?._schema !== STORAGE_SCHEMA) { clearState(); return null; }
+        return parsed.state || null;
+    } catch (_) { return null; }
+}
+
+function clearState() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+}
 
 function initDragAndDrop() {
     if (_dndInitialized) return;
@@ -227,6 +252,41 @@ function applyTeamColors(c1, c2) {
     try { localStorage.setItem('vb-team-colors', JSON.stringify({ c1, c2 })); } catch (_) {}
 }
 
+function restoreSavedMatch() {
+    const saved = loadState();
+    if (!saved) return false;
+
+    Object.assign(state, saved);
+
+    // matchStarted covers no-jersey matches; team1Players.length covers old saves from jersey matches
+    const inProgress = state.matchStarted || state.team1Players.length > 0;
+
+    if (state.matchOver) {
+        endMatch();
+    } else if (!inProgress) {
+        return false;
+    } else if (state.hasRotation && state.team1Rotation.length === 6) {
+        document.getElementById('setup').classList.add('hidden');
+        document.getElementById('rotationSetup').classList.add('hidden');
+        document.getElementById('scoreboard').classList.remove('hidden');
+        document.getElementById('matchResult').classList.add('hidden');
+        document.getElementById('rotation1').classList.remove('hidden');
+        document.getElementById('rotation2').classList.remove('hidden');
+        updateDisplay();
+    } else if (state.hasRotation) {
+        showNewSetRotationSetup();
+    } else {
+        document.getElementById('setup').classList.add('hidden');
+        document.getElementById('rotationSetup').classList.add('hidden');
+        document.getElementById('scoreboard').classList.remove('hidden');
+        document.getElementById('matchResult').classList.add('hidden');
+        document.getElementById('rotation1').classList.add('hidden');
+        document.getElementById('rotation2').classList.add('hidden');
+        updateDisplay();
+    }
+    return true;
+}
+
 function init() {
     // Restore saved team colors
     try {
@@ -302,6 +362,8 @@ function init() {
             document.querySelectorAll('.rotation-setup-pos').forEach(p => p.classList.remove('selected'));
         });
     });
+
+    restoreSavedMatch();
 }
 
 function toggleService() {
@@ -906,6 +968,9 @@ function showRotationSetup() {
 }
 
 function showNewSetRotationSetup() {
+    state.team1Rotation = [];
+    state.team2Rotation = [];
+    saveState();
     document.getElementById('scoreboard').classList.add('hidden');
     document.getElementById('rotationSetup').classList.remove('hidden');
 
@@ -1093,6 +1158,7 @@ function beginMatch() {
     const savedLast1 = state.lastStartingRotation1;
     const savedLast2 = state.lastStartingRotation2;
     resetMatchState();
+    state.matchStarted = true;
     state.team1Rotation = savedR1;
     state.team2Rotation = savedR2;
     state.hasRotation = savedHasRotation;
@@ -1116,6 +1182,7 @@ function beginMatch() {
 }
 
 function resetMatchState() {
+    clearState();
     state.currentSet = 1;
     state.team1Score = 0;
     state.team2Score = 0;
@@ -1140,6 +1207,7 @@ function resetMatchState() {
     state.hasRotation = false;
     state.lastStartingRotation1 = null;
     state.lastStartingRotation2 = null;
+    state.matchStarted = false;
 }
 
 function resetToSetup() {
@@ -1556,6 +1624,7 @@ function updateDisplay() {
 
     const container = document.querySelector('.timeline-container');
     container.scrollLeft = container.scrollWidth;
+    saveState();
 }
 
 document.addEventListener('DOMContentLoaded', init);
