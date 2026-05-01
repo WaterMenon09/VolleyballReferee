@@ -14,11 +14,13 @@ Deployment is automated via GitHub Actions (`.github/workflows/deploy.yml`) — 
 
 ## Architecture
 
-The app is a single-page vanilla JS application with three files:
+The app is a single-page vanilla JS application with three source files plus PWA support files:
 
 - `index.html` — all markup; four screens toggled via the `hidden` CSS class
 - `styles.css` — all styling; uses CSS variables and flexbox
 - `app.js` — all logic; single file, no modules
+- `manifest.webmanifest` — installability metadata; relative `start_url`/`scope` resolve correctly under the `/VolleyballReferee/` GitHub Pages subpath
+- `sw.js` — service worker (see PWA / offline section below)
 
 ### Screen flow
 
@@ -69,3 +71,9 @@ When a set ends, `checkSetWin()` calls `showSetBreakModal(nextSetNumber)` which 
 ### "Use previous rotation" feature
 
 `state.lastStartingRotation1` and `state.lastStartingRotation2` store the flat 6-element rotation arrays from the most recently confirmed starting rotation for each team. They are written in `confirmRotationSetup()` after building `state.team1Rotation`/`team2Rotation`, and nulled in `resetMatchState()`. Both fields are included in the `beginMatch()` save/restore block so they survive the `resetMatchState()` call. The `.use-prev-rotation[data-team="1/2"]` buttons are hidden (via `updatePrevRotationButtons()`) when the corresponding field is null (set 1), and shown from set 2 onward.
+
+### PWA / offline
+
+`manifest.webmanifest` — installability metadata; relative `start_url`/`scope` (`"./"`) resolve correctly under the `/VolleyballReferee/` GitHub Pages subpath and also work for local server testing.
+
+`sw.js` — service worker. Cache name is `vbref-v${VERSION}`; **bump `VERSION` in `sw.js` to invalidate all clients on the next deploy** and force re-download of updated assets. `APP_SHELL` lists every file precached at install — **add new CSS, JS, or icon files here or they will not be available offline**. HTML navigations use network-first (fresh on online reload, cached fallback offline). All other same-origin assets use cache-first. Cross-origin requests (Google Fonts, Analytics) are not intercepted and not cached — they silently fail offline, which is acceptable.
