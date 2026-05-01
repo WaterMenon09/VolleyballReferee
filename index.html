@@ -26,6 +26,7 @@
     </script>
 </head>
 <body>
+    <button id="historyBtn" class="history-btn" style="display:none">History</button>
     <div class="container">
         <h1>Volleyball Referee</h1>
 
@@ -313,7 +314,15 @@
         </div>
     </div>
 
-    <footer class="credits">v3.02 | Created by Menon Pranto</footer>
+    <div id="historyModal" class="modal hidden">
+        <div class="modal-content history-modal-content">
+            <h2>Match History</h2>
+            <div id="historyList" class="history-list"></div>
+            <button class="btn btn-secondary" id="closeHistory">Close</button>
+        </div>
+    </div>
+
+    <footer class="credits">v3.03 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
     <script>

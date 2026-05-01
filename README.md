@@ -123,6 +123,7 @@ The app is fully responsive and optimized for:
 
 ## Version History
 
+- **v3.03** - Schema migration framework for future localStorage upgrades; rotation-setup state persisted across reloads; match history log with per-set score pills
 - **v3.02** - Match state survives app close/reload (full scoresheet retention via localStorage)
 - **v3.01** - PWA support: installable to home screen, full offline capability via service worker
 - **v3.0** - Drag-and-drop rotation assignment; customizable team colors; letter/emoji jerseys; lead-margin charts; total points; return-to-setup mid-match; "use previous rotation" button; polished indoor arena theme
