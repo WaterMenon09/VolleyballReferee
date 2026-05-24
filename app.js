@@ -34,7 +34,9 @@ const state = {
     lastStartingRotation1: null,
     lastStartingRotation2: null,
     matchStarted: false,
-    deciderSideSwitched: false
+    deciderSideSwitched: false,
+    matchStartedAt: null,
+    matchDurationSec: null
 };
 
 const rotationSetupState = {
@@ -66,12 +68,83 @@ const STORAGE_SCHEMA = 1;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
+const APP_VERSION = 'v3.07';
+const ANALYTICS_DISABLED = (() => {
+    try {
+        const h = location.hostname;
+        return location.protocol === 'file:' || h === 'localhost' || h === '127.0.0.1' || h === '::1';
+    } catch (_) { return false; }
+})();
+
 function track(name, params) {
+    if (ANALYTICS_DISABLED) return;
     try {
         if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-            window.gtag('event', name, params || {});
+            window.gtag('event', name, Object.assign({ app_version: APP_VERSION }, params || {}));
         }
     } catch (_) {}
+}
+
+window.addEventListener('error', e => {
+    track('js_error', {
+        message: String(e.message || '').slice(0, 200),
+        source: String(e.filename || '').slice(0, 100).replace(/^.*\//, ''),
+        line: e.lineno || 0
+    });
+});
+window.addEventListener('unhandledrejection', e => {
+    const r = e && e.reason;
+    track('js_promise_rejection', {
+        reason: String((r && (r.message || r)) || '').slice(0, 200)
+    });
+});
+
+function getDisplayMode() {
+    try {
+        if (window.matchMedia('(display-mode: standalone)').matches) return 'standalone';
+        if (window.matchMedia('(display-mode: minimal-ui)').matches) return 'minimal-ui';
+        if (window.matchMedia('(display-mode: fullscreen)').matches) return 'fullscreen';
+        if (window.navigator.standalone) return 'standalone-ios';
+    } catch (_) {}
+    return 'browser';
+}
+
+let _vitalsReported = false;
+let _cls = 0;
+let _inp = 0;
+function reportWebVitals() {
+    if (_vitalsReported) return;
+    _vitalsReported = true;
+    track('web_vital', { metric: 'CLS', value: Math.round(_cls * 1000) });
+    if (_inp > 0) track('web_vital', { metric: 'INP', value: Math.round(_inp) });
+}
+function initWebVitals() {
+    if (typeof PerformanceObserver === 'undefined') return;
+    try {
+        new PerformanceObserver(list => {
+            const entries = list.getEntries();
+            const lcp = entries[entries.length - 1];
+            if (lcp) track('web_vital', { metric: 'LCP', value: Math.round(lcp.startTime) });
+        }).observe({ type: 'largest-contentful-paint', buffered: true });
+    } catch (_) {}
+    try {
+        new PerformanceObserver(list => {
+            for (const entry of list.getEntries()) {
+                if (!entry.hadRecentInput) _cls += entry.value;
+            }
+        }).observe({ type: 'layout-shift', buffered: true });
+    } catch (_) {}
+    try {
+        new PerformanceObserver(list => {
+            for (const entry of list.getEntries()) {
+                if (entry.interactionId && entry.duration > _inp) _inp = entry.duration;
+            }
+        }).observe({ type: 'event', buffered: true, durationThreshold: 40 });
+    } catch (_) {}
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') reportWebVitals();
+    });
+    window.addEventListener('pagehide', reportWebVitals);
 }
 
 function saveState() {
@@ -310,7 +383,7 @@ function restoreSavedMatch() {
     let onScoreboard = false;
 
     if (state.matchOver) {
-        endMatch();
+        endMatch({ fromRestore: true });
     } else if (!inProgress) {
         return false;
     } else if (state.team1Players.length > 0 && state.hasRotation && (!Array.isArray(state.team1Rotation) || state.team1Rotation.length === 0) && !state.matchStarted) {
@@ -351,6 +424,10 @@ function restoreSavedMatch() {
 }
 
 function init() {
+    track('launch', { display_mode: getDisplayMode(), online: navigator.onLine });
+    initWebVitals();
+    window.addEventListener('appinstalled', () => track('pwa_installed'));
+
     // Restore saved team colors
     try {
         const saved = JSON.parse(localStorage.getItem('vb-team-colors') || 'null');
@@ -1384,6 +1461,7 @@ function beginMatch() {
     const savedLast2 = state.lastStartingRotation2;
     resetMatchState();
     state.matchStarted = true;
+    state.matchStartedAt = Date.now();
     state.team1Rotation = savedR1;
     state.team2Rotation = savedR2;
     state.hasRotation = savedHasRotation;
@@ -1442,6 +1520,8 @@ function resetMatchState() {
     state.lastStartingRotation2 = null;
     state.matchStarted = false;
     state.deciderSideSwitched = false;
+    state.matchStartedAt = null;
+    state.matchDurationSec = null;
     _restoredRotationSetup = null;
 }
 
@@ -1659,20 +1739,27 @@ function renderSetChart(set) {
     `;
 }
 
-function endMatch() {
+function endMatch({ fromRestore = false } = {}) {
     state.matchOver = true;
     const winner = state.team1Sets > state.team2Sets ? state.team1Name : state.team2Name;
     const totalT1Pts = state.setHistory.reduce((a, s) => a + s.team1Score, 0);
     const totalT2Pts = state.setHistory.reduce((a, s) => a + s.team2Score, 0);
-    track('match_complete', {
-        match_type: state.matchType,
-        sets_played: state.setHistory.length,
-        t1_sets: state.team1Sets,
-        t2_sets: state.team2Sets,
-        winner_side: state.team1Sets > state.team2Sets ? 1 : 2,
-        total_points: totalT1Pts + totalT2Pts,
-        went_to_decider: state.setHistory.length === (state.matchType === 3 ? 3 : 5)
-    });
+
+    if (!fromRestore) {
+        if (state.matchStartedAt && state.matchDurationSec == null) {
+            state.matchDurationSec = Math.round((Date.now() - state.matchStartedAt) / 1000);
+        }
+        track('match_complete', {
+            match_type: state.matchType,
+            sets_played: state.setHistory.length,
+            t1_sets: state.team1Sets,
+            t2_sets: state.team2Sets,
+            winner_side: state.team1Sets > state.team2Sets ? 1 : 2,
+            total_points: totalT1Pts + totalT2Pts,
+            went_to_decider: state.setHistory.length === (state.matchType === 3 ? 3 : 5),
+            duration_sec: state.matchDurationSec != null ? state.matchDurationSec : null
+        });
+    }
 
     document.getElementById('scoreboard').classList.add('hidden');
     document.getElementById('matchResult').classList.remove('hidden');

@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## [v3.07] - 2026-05-25
+
+### Added
+
+- PWA telemetry: `launch` event with `display_mode` (standalone / minimal-ui /
+  fullscreen / standalone-ios / browser) and `online` status; `pwa_installed`
+  event on `appinstalled`.
+- Core Web Vitals reporting via `PerformanceObserver`: `LCP` on observation,
+  `CLS` and `INP` reported once on the first `visibilitychange` → hidden or
+  `pagehide`.
+- JS error tracking: `js_error` (window `error` events) and
+  `js_promise_rejection` (`unhandledrejection`), with messages clamped to
+  200 chars and source-paths to basename only.
+- `app_version` param attached to every analytics event for release-cohort
+  slicing.
+- Match duration: `match_complete` now includes `duration_sec` (computed
+  from a new `state.matchStartedAt` set in `beginMatch()`).
+
+### Changed
+
+- `track()` no-ops on `localhost`, `127.0.0.1`, `::1`, and `file://` so dev
+  sessions don't pollute production analytics.
+
+### Fixed
+
+- `match_complete` no longer re-fires (with an inflated `duration_sec`)
+  every time the user reloads while the result screen is showing.
+  `endMatch()` now takes a `{ fromRestore }` flag and the duration is
+  frozen into persisted state at match-end time.
+
 ## [v3.06] - 2026-05-25
 
 ### Added
