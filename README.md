@@ -123,6 +123,7 @@ The app is fully responsive and optimized for:
 
 ## Version History
 
+- **v3.05** - GA4 analytics events for match flow (match_start, set_complete, match_complete) and feature usage (timeouts, substitutions, manual team swap, decider side-switch, undo, history open, "use previous rotation", color swatch picks). Safe `track()` helper no-ops when gtag is blocked.
 - **v3.04** - FIVB Rule 18.2.2: automatic side-switch modal when either team reaches 8 points in the deciding set; survives page reload. Also adds timer-end shake animations and haptic feedback (vibration on supporting devices) for timer expirations and the deciding-set side-switch popup. Timeout and set-break timers now keep accurate time when the browser tab is in the background.
 - **v3.03** - Schema migration framework for future localStorage upgrades; rotation-setup state persisted across reloads; match history log with per-set score pills
 - **v3.02** - Match state survives app close/reload (full scoresheet retention via localStorage)

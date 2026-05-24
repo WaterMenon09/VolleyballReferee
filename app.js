@@ -66,6 +66,14 @@ const STORAGE_SCHEMA = 1;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
+function track(name, params) {
+    try {
+        if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+            window.gtag('event', name, params || {});
+        }
+    } catch (_) {}
+}
+
 function saveState() {
     try {
         const payload = { _schema: STORAGE_SCHEMA, state, rotationSetup: { ...rotationSetupState } };
@@ -368,13 +376,14 @@ function init() {
                 const c1 = getComputedStyle(document.documentElement).getPropertyValue('--team1-color').trim();
                 applyTeamColors(c1, color);
             }
+            track('color_swatch_used', { team: parseInt(team), color });
         });
     });
 
     document.getElementById('startMatch').addEventListener('click', startMatch);
     document.getElementById('playAgain').addEventListener('click', resetToSetup);
     document.getElementById('undoPoint').addEventListener('click', undoLastPoint);
-    document.getElementById('historyBtn').addEventListener('click', showHistoryModal);
+    document.getElementById('historyBtn').addEventListener('click', () => { track('history_open'); showHistoryModal(); });
     document.getElementById('closeHistory').addEventListener('click', closeHistoryModal);
     document.getElementById('historyModal').addEventListener('click', e => {
         if (e.target === document.getElementById('historyModal')) closeHistoryModal();
@@ -389,7 +398,7 @@ function init() {
     });
 
     document.getElementById('serveIndicator').addEventListener('click', toggleService);
-    document.getElementById('swapTeams').addEventListener('click', swapTeams);
+    document.getElementById('swapTeams').addEventListener('click', () => { track('swap_teams_manual', { set: state.currentSet }); swapTeams(); });
 
     document.getElementById('timeout1').addEventListener('click', () => useTimeout(1));
     document.getElementById('timeout2').addEventListener('click', () => useTimeout(2));
@@ -423,6 +432,7 @@ function init() {
             rotationSetupState.selectedTeam = null;
             document.querySelectorAll('.rotation-setup-pos').forEach(p => p.classList.remove('selected'));
             saveState();
+            track('use_prev_rotation', { team, set: state.currentSet });
         });
     });
 
@@ -470,9 +480,11 @@ function rotateTeam(team) {
 function useTimeout(team) {
     if (team === 1 && state.team1Timeouts > 0) {
         state.team1Timeouts--;
+        track('timeout_used', { team: 1, set: state.currentSet });
         showTimeoutModal(state.team1Name);
     } else if (team === 2 && state.team2Timeouts > 0) {
         state.team2Timeouts--;
+        track('timeout_used', { team: 2, set: state.currentSet });
         showTimeoutModal(state.team2Name);
     }
     updateDisplay();
@@ -689,6 +701,7 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
     const rotationIndex = positionMap[position];
     const currentPlayer = rotation[rotationIndex];
 
+    let subType;
     if (isLibero) {
         if (team === 1) {
             state.team1LiberoIn = rotationIndex;
@@ -696,6 +709,7 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
             state.team2LiberoIn = rotationIndex;
         }
         subs[rotationIndex] = { original: currentPlayer, liberoFor: currentPlayer };
+        subType = 'libero';
     } else if (subs[rotationIndex] && subs[rotationIndex].original === newPlayer) {
         delete subs[rotationIndex];
         if (team === 1 && state.team1LiberoIn === rotationIndex) {
@@ -703,13 +717,16 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
         } else if (team === 2 && state.team2LiberoIn === rotationIndex) {
             state.team2LiberoIn = null;
         }
+        subType = 'revert';
     } else {
         if (!subs[rotationIndex]) {
             subs[rotationIndex] = { original: currentPlayer };
         }
+        subType = 'sub';
     }
 
     rotation[rotationIndex] = newPlayer;
+    track('substitution', { team, type: subType, set: state.currentSet });
     updateDisplay();
 }
 
@@ -968,6 +985,10 @@ function closeDeciderSwitchModal() {
     if (modal.classList.contains('hidden')) return;
     state.deciderSideSwitched = true;
     modal.classList.add('hidden');
+    track('decider_side_switch', {
+        t1_score: state.team1Score,
+        t2_score: state.team2Score
+    });
     swapTeams();
 }
 
@@ -1382,6 +1403,14 @@ function beginMatch() {
         document.getElementById('rotation2').classList.remove('hidden');
     }
 
+    track('match_start', {
+        match_type: state.matchType,
+        sets_to_win: state.setsToWin,
+        has_rotation: state.hasRotation,
+        t1_players: state.team1Players.length,
+        t2_players: state.team2Players.length
+    });
+
     updateDisplay();
 }
 
@@ -1511,6 +1540,15 @@ function checkSetWin() {
             state.team2Sets++;
         }
 
+        track('set_complete', {
+            set_number: state.currentSet,
+            winner: setWinner,
+            t1_score: state.team1Score,
+            t2_score: state.team2Score,
+            point_diff: Math.abs(state.team1Score - state.team2Score),
+            is_decider: state.currentSet === (state.matchType === 3 ? 3 : 5)
+        });
+
         if (state.team1Sets >= state.setsToWin || state.team2Sets >= state.setsToWin) {
             const _cs = getComputedStyle(document.documentElement);
             const _colorA = _cs.getPropertyValue('--team1-color').trim();
@@ -1624,6 +1662,17 @@ function renderSetChart(set) {
 function endMatch() {
     state.matchOver = true;
     const winner = state.team1Sets > state.team2Sets ? state.team1Name : state.team2Name;
+    const totalT1Pts = state.setHistory.reduce((a, s) => a + s.team1Score, 0);
+    const totalT2Pts = state.setHistory.reduce((a, s) => a + s.team2Score, 0);
+    track('match_complete', {
+        match_type: state.matchType,
+        sets_played: state.setHistory.length,
+        t1_sets: state.team1Sets,
+        t2_sets: state.team2Sets,
+        winner_side: state.team1Sets > state.team2Sets ? 1 : 2,
+        total_points: totalT1Pts + totalT2Pts,
+        went_to_decider: state.setHistory.length === (state.matchType === 3 ? 3 : 5)
+    });
 
     document.getElementById('scoreboard').classList.add('hidden');
     document.getElementById('matchResult').classList.remove('hidden');
@@ -1653,6 +1702,7 @@ function endMatch() {
 
 function undoLastPoint() {
     if (state.pointHistory.length === 0) return;
+    track('undo_point', { set: state.currentSet });
 
     const lastState = state.pointHistory.pop();
     state.team1Score = lastState.team1Score;
