@@ -68,7 +68,7 @@ const STORAGE_SCHEMA = 2;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v3.08';
+const APP_VERSION = 'v3.09';
 const ANALYTICS_DISABLED = (() => {
     try {
         const h = location.hostname;
@@ -551,6 +551,7 @@ function rotateTeam(team) {
         }
 
         checkLiberoFrontRow(team);
+        checkLiberoAtServer(team);
     }
 }
 
@@ -726,8 +727,10 @@ function showSubModal(team, position) {
     }
 
     if (libero && !playersOnCourt.includes(libero)) {
-        if (isBackRow) {
+        if (isBackRow && position !== 1) {
             fragment.appendChild(makeSubEl(libero, ['libero'], { 'data-is-libero': 'true', title: 'Libero' }));
+        } else if (position === 1) {
+            fragment.appendChild(makeSubEl(libero, ['libero', 'disabled'], { title: 'Libero cannot serve (FIVB rule 19.3.2.5)' }));
         } else {
             fragment.appendChild(makeSubEl(libero, ['libero', 'disabled'], { title: 'Libero can only sub in back row' }));
         }
@@ -780,6 +783,12 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
 
     let subType;
     if (isLibero) {
+        // FIVB rule 19.3.2.5: the libero cannot serve. Position 1 (rotationIndex 0)
+        // is the server, so reject the substitution at this layer too — the UI
+        // already disables the option, this is defence-in-depth.
+        if (rotationIndex === 0) {
+            return;
+        }
         if (team === 1) {
             state.team1LiberoIn = rotationIndex;
         } else {
@@ -936,6 +945,29 @@ function checkLiberoFrontRow(team) {
             }
         }
     });
+}
+
+// FIVB rule 19.3.2.5: the libero cannot serve. Position 1 (array index 0) is the
+// server, which is technically a back-row spot so checkLiberoFrontRow does not
+// cover it. If a rotation brings the libero into index 0, force them out and
+// restore the original player they replaced.
+function checkLiberoAtServer(team) {
+    const libero = team === 1 ? state.team1Libero : state.team2Libero;
+    const rotation = team === 1 ? state.team1Rotation : state.team2Rotation;
+    const subs = team === 1 ? state.team1Subs : state.team2Subs;
+    const liberoIn = team === 1 ? state.team1LiberoIn : state.team2LiberoIn;
+
+    if (!libero || liberoIn === null) return;
+
+    if (rotation[0] === libero && subs[0]) {
+        rotation[0] = subs[0].original;
+        delete subs[0];
+        if (team === 1) {
+            state.team1LiberoIn = null;
+        } else {
+            state.team2LiberoIn = null;
+        }
+    }
 }
 
 function switchSides() {

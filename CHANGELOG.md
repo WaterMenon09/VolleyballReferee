@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## [v3.09] - 2026-05-25
+
+### Fixed
+
+- Libero is no longer allowed to occupy position 1 (the server), per FIVB rule
+  19.3.2.5 ("the libero cannot serve"). Position 1 is technically a back-row
+  position, so `checkLiberoFrontRow` did not cover it.
+  - The substitution modal now disables the libero option when position 1 is
+    selected and shows the tooltip "Libero cannot serve (FIVB rule 19.3.2.5)".
+  - `makeSubstitution` rejects any libero sub targeting `rotationIndex === 0`
+    as defence-in-depth.
+  - A new `checkLiberoAtServer(team)` helper runs after every `rotateTeam`
+    call: if the libero rotated into index 0, the original player they
+    replaced is restored automatically (mirroring the existing front-row
+    auto-sub-out behaviour).
+
 ## [v3.08] - 2026-05-25
 
 ### Fixed
