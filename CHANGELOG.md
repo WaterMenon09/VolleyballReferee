@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## [v3.08] - 2026-05-25
+
+### Fixed
+
+- Team rotation direction. `rotateTeam()` was rotating counter-clockwise (pos 6
+  → pos 1 became the new server) instead of clockwise per FIVB rules (pos 2
+  → pos 1 becomes the new server). Both teams were affected identically. The
+  sub remap and libero shift were inverted to match (`(idx + 5) % 6`).
+
+### Changed
+
+- `STORAGE_SCHEMA` bumped to `2`. Any in-flight match saved under v3.07 or
+  earlier is dropped on next load — restoring it would place players on the
+  wrong court positions for the rest of the set.
+
 ## [v3.07] - 2026-05-25
 
 ### Added

@@ -64,11 +64,11 @@ let _dndInitialized = false;
 let _restoredRotationSetup = null;
 
 const STORAGE_KEY = 'vb-match-state';
-const STORAGE_SCHEMA = 1;
+const STORAGE_SCHEMA = 2;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v3.07';
+const APP_VERSION = 'v3.08';
 const ANALYTICS_DISABLED = (() => {
     try {
         const h = location.hostname;
@@ -529,24 +529,24 @@ function rotateTeam(team) {
     const subs = team === 1 ? state.team1Subs : state.team2Subs;
 
     if (rotation.length === 6) {
-        const last = rotation.pop();
-        rotation.unshift(last);
+        const first = rotation.shift();
+        rotation.push(first);
 
         const newSubs = {};
         Object.entries(subs).forEach(([idx, sub]) => {
-            const newIdx = (parseInt(idx) + 1) % 6;
+            const newIdx = (parseInt(idx) + 5) % 6;
             newSubs[newIdx] = sub;
         });
 
         if (team === 1) {
             state.team1Subs = newSubs;
             if (state.team1LiberoIn !== null) {
-                state.team1LiberoIn = (state.team1LiberoIn + 1) % 6;
+                state.team1LiberoIn = (state.team1LiberoIn + 5) % 6;
             }
         } else {
             state.team2Subs = newSubs;
             if (state.team2LiberoIn !== null) {
-                state.team2LiberoIn = (state.team2LiberoIn + 1) % 6;
+                state.team2LiberoIn = (state.team2LiberoIn + 5) % 6;
             }
         }
 

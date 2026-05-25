@@ -52,7 +52,7 @@ index: 0  1  2  3  4  5
 pos:   1  2  3  4  5  6
 ```
 
-The `rotateTeam()` function shifts element 5 (position 6, server) to the front (index 0, position 1) — a clockwise rotation. The `updateRotationDisplay()` function uses a separate `positionMap = [3, 2, 1, 4, 5, 0]` to translate DOM node order (front row left-to-right: 4-3-2, back row left-to-right: 5-6-1) into rotation array indices.
+The server occupies position 1 (index 0, back-right). The `rotateTeam()` function shifts element 0 (position 1) to the end of the array (position 6) — clockwise rotation per FIVB rules, where the player at position 2 (front-right, index 1) moves to position 1 and becomes the new server. The `updateRotationDisplay()` function uses a separate `positionMap = [3, 2, 1, 4, 5, 0]` to translate DOM node order (front row left-to-right: 4-3-2, back row left-to-right: 5-6-1) into rotation array indices.
 
 ### Team color identity
 
