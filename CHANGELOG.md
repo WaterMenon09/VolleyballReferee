@@ -6,6 +6,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## [v4.00] - 2026-06-11
+
+### Added
+
+- **Settings modal** (`#settingsModal`): configurable match rules (timeout duration,
+  timeouts per set, technical timeouts at 8 & 16 pts, set break duration, regular-set
+  points, final-set points) and app preferences (sound on/off, vibration on/off,
+  keep-awake screen lock). Rules are snapshotted into `state.rules` at `beginMatch()`
+  and never mutated mid-match; app prefs are read live from `settings`.
+- **Technical timeouts**: automatic 60-second timeout at the first team to reach 8 and
+  16 points in any non-deciding set (when enabled). `state.techTimeoutsFired` tracks
+  fired thresholds per set; sticky, excluded from `pointHistory` snapshots (same
+  semantics as `deciderSideSwitched`).
+- **Synthesized whistle sounds** via Web Audio API (no audio files shipped); all sound
+  playback gated behind the `settings.sound` preference.
+- **Haptic feedback gating**: `navigator.vibrate()` calls now check `settings.vibration`
+  before firing — previously always-on.
+- **Wake Lock** (`navigator.wakeLock`): keeps the screen on during an active match when
+  the keep-awake preference is enabled; released on match end or app blur.
+- **Feedback modal** (`#feedbackModal`): in-app feedback form submitted to Web3Forms.
+  Owner must replace the `WEB3FORMS_ACCESS_KEY` placeholder in `app.js` with a live key
+  from web3forms.com before submissions will deliver.
+- **Share result button**: uses the Web Share API (with clipboard fallback) to share the
+  final match scoresheet from the match-result screen.
+- **Top action row** fixed top-right across all screens: feedback, settings, and history
+  buttons grouped in a persistent header row.
+- **Stadium Night visual polish**: contrast lift across all panels, ≥ 44 px tap targets
+  enforced, `:focus-visible` keyboard rings on all interactive elements, full
+  `prefers-reduced-motion` support, staggered entrance animation on the match-result
+  screen, team-colored serve indicator dot.
+- **Dynamic timeout dots**: remaining timeouts per team rendered as filled/empty dots
+  built dynamically from the configured count; the dot row hides entirely when timeouts
+  per set are configured to 0 (v3.09 showed dots, but fixed at 2 regardless of settings).
+- `#historyModal` for the match history log (already present since v3.03, now
+  explicitly listed alongside the other modals).
+
+### Changed
+
+- `STORAGE_SCHEMA` bumped from 2 to 3. The `migrate()` function performs a real 2 → 3
+  migration (injects hardcoded v2-era rule constants into `state.rules` and seeds
+  `state.techTimeoutsFired = []`) so in-flight matches are preserved rather than dropped.
+- `settings` object loaded from `vb-settings` localStorage key; merged against
+  `DEFAULT_SETTINGS` on load with per-field type checking and numeric clamping so
+  future additions never corrupt existing saves.
+- Version string format in `sw.js` now uses the dotted form `v4.0.0` (was `v3.0.9`).
+
+### Known limitations
+
+- iOS hardware silent switch mutes Web Audio whistles; there is no programmatic
+  workaround available in the browser.
+- Undoing a point across a set boundary can re-arm a technical timeout threshold in the
+  restored set. This is intentional: `techTimeoutsFired` is sticky per set and excluded
+  from `pointHistory` snapshots, mirroring the existing `deciderSideSwitched` semantics.
+- The feedback form requires the owner to replace the `WEB3FORMS_ACCESS_KEY` placeholder
+  in `app.js` with a live key from web3forms.com before submissions will deliver.
+
 ## [v3.09] - 2026-05-25
 
 ### Fixed

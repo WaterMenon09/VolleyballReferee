@@ -31,13 +31,23 @@ Four views are shown/hidden by toggling the `hidden` class on their container di
 3. `#scoreboard` — active game screen
 4. `#matchResult` — post-match result
 
-Five modals are used across screens: `#subModal` (player substitution, overlays scoreboard), `#timeoutModal` (30-second countdown, overlays scoreboard), `#setBreakModal` (3-minute set break timer, shown between sets), `#returnToSetupModal` (confirmation dialog for returning to setup mid-match), and `#deciderSwitchModal` (side-switch notification at 8 points in the deciding set).
+Eight modals are used across screens: `#subModal` (player substitution, overlays scoreboard), `#timeoutModal` (30-second countdown, overlays scoreboard), `#setBreakModal` (3-minute set break timer, shown between sets), `#returnToSetupModal` (confirmation dialog for returning to setup mid-match), `#deciderSwitchModal` (side-switch notification at 8 points in the deciding set), `#settingsModal` (configurable match rules and app preferences), `#feedbackModal` (in-app feedback form via Web3Forms), and `#historyModal` (match history log).
 
 ### State management
 
 All game state lives in a single global `state` object (top of `app.js`). A secondary `rotationSetupState` object holds transient rotation-setup UI state (selected position, pending assignments) and is reset each time rotation setup is shown.
 
 `updateDisplay()` is the single render function that syncs the entire UI to `state`. All mutations to `state` end with a call to `updateDisplay()`.
+
+### Settings and rules
+
+User-configurable settings are stored in the `vb-settings` localStorage key. On load, `loadSettings()` merges the stored value against `DEFAULT_SETTINGS`, applying per-field type checking and numeric clamping — adding a new setting with a default is safe and never corrupts existing saves.
+
+Settings are split into two categories with different consumption semantics:
+- **Match rules** (timeout duration, timeouts per set, technical timeouts toggle, set break duration, regular/final set points) — snapshotted into `state.rules` by `snapshotRules()` inside `beginMatch()` and never mutated mid-match. `getRules()` returns `state.rules` during a match, falling back to a fresh `snapshotRules()` call if `state.rules` is null (e.g., on a stats-only path). This means changing settings mid-match has no effect until the next match starts.
+- **App preferences** (sound, vibration, keepAwake) — read live from the `settings` object at the point of use; changes take effect immediately.
+
+The owner must replace `WEB3FORMS_ACCESS_KEY` in `app.js` with a live key from web3forms.com for the feedback form to deliver submissions.
 
 ### Undo system
 
@@ -76,15 +86,21 @@ When a set ends, `checkSetWin()` calls `showSetBreakModal(nextSetNumber)` which 
 
 `manifest.webmanifest` — installability metadata; relative `start_url`/`scope` (`"./"`) resolve correctly under the `/VolleyballReferee/` GitHub Pages subpath and also work for local server testing.
 
-`sw.js` — service worker. Cache name is `vbref-v${VERSION}`; **bump `VERSION` in `sw.js` to invalidate all clients on the next deploy** and force re-download of updated assets. `APP_SHELL` lists every file precached at install — **add new CSS, JS, or icon files here or they will not be available offline**. HTML navigations use network-first (fresh on online reload, cached fallback offline). All other same-origin assets use cache-first. Cross-origin requests (Google Fonts, Analytics) are not intercepted and not cached — they silently fail offline, which is acceptable.
+`sw.js` — service worker. Cache name is `vbref-v${VERSION}`; **bump `VERSION` in `sw.js` to invalidate all clients on the next deploy** and force re-download of updated assets. `APP_SHELL` lists every file precached at install — **add new CSS, JS, or icon files here or they will not be available offline**. HTML navigations use network-first (fresh on online reload, cached fallback offline). All other same-origin assets use cache-first. Cross-origin requests (Google Fonts, Analytics) are not intercepted and not cached — they silently fail offline, which is acceptable. Note: the v4.00 release did not add any new files to `APP_SHELL` — whistle sounds are synthesized via Web Audio API at runtime, and new icons use inline SVG — so the precache list is unchanged.
 
 ### Deciding-set side switch
 
 `state.deciderSideSwitched` (boolean, persisted) tracks whether the mid-set side switch has fired in the current deciding set. When either team reaches 8 points in a 15-point final set, `maybeTriggerDeciderSwitch()` fires `showDeciderSwitchModal()`. On confirm, `closeDeciderSwitchModal()` sets the flag to `true` then calls `swapTeams()`. The flag is reset in `resetMatchState()` and in the set-transition branch of `checkSetWin()`. It is intentionally **not** included in `pointHistory` snapshots — it is sticky for the set, so undoing the trigger point reverts the score but keeps the swap in place (same semantics as the manual swap button).
 
+### Technical timeouts
+
+`state.techTimeoutsFired` is a flat array of numeric thresholds (8 and 16) that have already triggered in the current set. `maybeTriggerTechnicalTimeout()` is called after every point: it checks the leading score against each configured threshold and, if the threshold has not yet fired, pushes it into `techTimeoutsFired` (marking it sticky) before showing the timeout modal. The array is reset to `[]` at `beginMatch()` and at each set transition inside `checkSetWin()`.
+
+`techTimeoutsFired` is intentionally **not** included in `pointHistory` snapshots — same precedent as `deciderSideSwitched`. Undoing the trigger point reverts the score but keeps the threshold marked as fired for the current set. `swapTeams()` does not touch this array because the thresholds are team-neutral (they fire on the leading score, regardless of which team is ahead). Known limitation: undoing a point that crossed a set boundary can leave a threshold marked as fired in a set where it was never actually triggered — this is acceptable given the same sticky semantics used elsewhere.
+
 ### Match state persistence
 
-The full `state` object is serialized to localStorage under the key `vb-match-state` after every `updateDisplay()` call. On `init()`, `restoreSavedMatch()` reads it and routes the user back to the correct screen (scoreboard / rotation setup / match result). Stored under a `_schema` version field — bump `STORAGE_SCHEMA` when the state shape changes in a way that breaks restore, and stale data is silently dropped. `resetMatchState()` clears the stored state so a "Return to Setup" reliably starts fresh. Timer intervals (timeout countdown, set break) live in module-level vars, not in state — they are NOT restored, so a timeout interrupted by reload simply ends.
+The full `state` object is serialized to localStorage under the key `vb-match-state` after every `updateDisplay()` call. On `init()`, `restoreSavedMatch()` reads it and routes the user back to the correct screen (scoreboard / rotation setup / match result). Stored under a `_schema` version field — `STORAGE_SCHEMA` is currently **3**. Bump it when the state shape changes in a way that breaks restore. Unlike earlier versions, schema changes are handled by `migrate()` rather than by silently dropping state: the 2 → 3 migration injects hardcoded v2-era rule constants into `state.rules` and seeds `state.techTimeoutsFired = []`, preserving in-flight matches. Only add a `return null` (discard) path for truly irrecoverable breaks. `resetMatchState()` clears the stored state so a "Return to Setup" reliably starts fresh. Timer intervals (timeout countdown, set break) live in module-level vars, not in state — they are NOT restored, so a timeout interrupted by reload simply ends.
 
 ## Code Review Checklist
 

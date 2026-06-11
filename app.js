@@ -36,7 +36,9 @@ const state = {
     matchStarted: false,
     deciderSideSwitched: false,
     matchStartedAt: null,
-    matchDurationSec: null
+    matchDurationSec: null,
+    rules: null,
+    techTimeoutsFired: []
 };
 
 const rotationSetupState = {
@@ -47,11 +49,36 @@ const rotationSetupState = {
     isNewSet: false
 };
 
-const REGULAR_SET_POINTS = 25;
-const FINAL_SET_POINTS = 15;
-const MIN_LEAD = 2;
-const TIMEOUT_DURATION = 30;
-const SET_BREAK_DURATION = 180;
+const MIN_LEAD = 2; // win-by-2, fixed (FIVB)
+
+// ── Settings ──────────────────────────────────────────────────────────────
+// Configurable rules + app prefs. Rules are snapshotted into state.rules at
+// match start (getRules()); app prefs are read live from `settings`.
+const SETTINGS_KEY = 'vb-settings';
+const DEFAULT_SETTINGS = Object.freeze({
+    // match rules (snapshotted into state.rules at match start)
+    timeoutDuration: 30,      // seconds, 10–120
+    timeoutsPerSet: 2,        // per team, 0–4
+    technicalTimeouts: false, // FIVB-style: 8 & 16 pts, non-deciding sets, 60s
+    setBreakDuration: 180,    // seconds, 30–600
+    regularSetPoints: 25,     // 5–50
+    finalSetPoints: 15,       // 5–50
+    // app prefs (read live)
+    sound: true,
+    vibration: true,
+    keepAwake: true
+});
+const RULE_KEYS = ['timeoutDuration', 'timeoutsPerSet', 'technicalTimeouts',
+                   'setBreakDuration', 'regularSetPoints', 'finalSetPoints'];
+const SETTINGS_RANGES = {
+    timeoutDuration: [10, 120], timeoutsPerSet: [0, 4],
+    setBreakDuration: [30, 600], regularSetPoints: [5, 50], finalSetPoints: [5, 50]
+};
+const TECH_TIMEOUT_DURATION = 60;        // seconds, fixed per FIVB rules
+const TECH_TIMEOUT_THRESHOLDS = [8, 16]; // leading-score thresholds, fixed per FIVB rules
+
+let settings = { ...DEFAULT_SETTINGS };
+
 const TIMER_CIRCLE_RADIUS = 45; // SVG circle radius from viewBox
 const TIMER_CIRCLE_CIRCUMFERENCE = 2 * Math.PI * TIMER_CIRCLE_RADIUS;
 
@@ -64,11 +91,16 @@ let _dndInitialized = false;
 let _restoredRotationSetup = null;
 
 const STORAGE_KEY = 'vb-match-state';
-const STORAGE_SCHEMA = 2;
+const STORAGE_SCHEMA = 3;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v3.09';
+const APP_VERSION = 'v4.00';
+
+// ── Feedback (Web3Forms) ──────────────────────────────────────────────────
+const WEB3FORMS_ACCESS_KEY = 'REPLACE_WITH_WEB3FORMS_ACCESS_KEY'; // TODO(owner): paste key from web3forms.com
+const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit';
+
 const ANALYTICS_DISABLED = (() => {
     try {
         const h = location.hostname;
@@ -98,6 +130,69 @@ window.addEventListener('unhandledrejection', e => {
         reason: String((r && (r.message || r)) || '').slice(0, 200)
     });
 });
+
+// ── SoundFX ───────────────────────────────────────────────────────────────
+// Synthesized referee pea-whistle: square-wave carrier ~2300 Hz + 38 Hz
+// sine LFO modulating frequency ±220 Hz. No audio files — no APP_SHELL change.
+const SoundFX = (() => {
+    let ctx = null;
+    function unlock() {
+        try {
+            ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') ctx.resume();
+        } catch (_) {}
+    }
+    function blast(t0, dur) {
+        const osc = ctx.createOscillator(); osc.type = 'square'; osc.frequency.value = 2300;
+        const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 38;
+        const lfoGain = ctx.createGain(); lfoGain.gain.value = 220;
+        lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(0.25, t0 + 0.015);
+        g.gain.setValueAtTime(0.25, Math.max(t0 + 0.015, t0 + dur - 0.05));
+        g.gain.linearRampToValueAtTime(0, t0 + dur);
+        osc.connect(g); g.connect(ctx.destination);
+        osc.start(t0); lfo.start(t0);
+        osc.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+    }
+    const PATTERNS = {
+        timeoutEnd: [[0, 0.35]],
+        techTimeout: [[0, 0.35]],
+        setEnd:     [[0, 0.3], [0.45, 0.45]],
+        matchEnd:   [[0, 0.25], [0.35, 0.25], [0.7, 0.9]]
+    };
+    function play(name) {
+        if (!settings.sound) return;
+        unlock();
+        if (!ctx || ctx.state !== 'running') return; // load-bearing on iOS — never throws
+        const t = ctx.currentTime + 0.02;
+        (PATTERNS[name] || []).forEach(([off, dur]) => blast(t + off, dur));
+    }
+    return { unlock, play };
+})();
+
+// ── Wake Lock ─────────────────────────────────────────────────────────────
+let _wakeLock = null;
+let _wakeLockPending = false;
+async function acquireWakeLock() {
+    if (!settings.keepAwake || !('wakeLock' in navigator)) return;
+    if (_wakeLock || _wakeLockPending) return;
+    _wakeLockPending = true;
+    try {
+        _wakeLock = await navigator.wakeLock.request('screen');
+        _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    } catch (_) {
+        _wakeLock = null;
+    } finally {
+        _wakeLockPending = false;
+    }
+}
+function releaseWakeLock() {
+    try { if (_wakeLock) _wakeLock.release(); } catch (_) {}
+    _wakeLock = null;
+}
+function matchIsLive() { return state.matchStarted && !state.matchOver; }
 
 function getDisplayMode() {
     try {
@@ -147,6 +242,245 @@ function initWebVitals() {
     window.addEventListener('pagehide', reportWebVitals);
 }
 
+function loadSettings() {
+    try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if (!raw) { settings = { ...DEFAULT_SETTINGS }; return; }
+        const parsed = JSON.parse(raw);
+        const next = { ...DEFAULT_SETTINGS };
+        for (const key of Object.keys(DEFAULT_SETTINGS)) {
+            if (!(key in parsed)) continue; // missing → keep default
+            if (typeof DEFAULT_SETTINGS[key] === 'boolean') {
+                next[key] = !!parsed[key];
+            } else {
+                const n = parseInt(parsed[key], 10);
+                if (Number.isNaN(n)) continue; // invalid → keep default
+                const range = SETTINGS_RANGES[key];
+                next[key] = range ? Math.min(range[1], Math.max(range[0], n)) : n;
+            }
+        }
+        settings = next;
+    } catch (_) { settings = { ...DEFAULT_SETTINGS }; }
+}
+
+function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (_) {}
+}
+
+// Pick the rule keys from current settings into a fresh, match-frozen object.
+function snapshotRules() {
+    const out = {};
+    for (const key of RULE_KEYS) out[key] = settings[key];
+    return out;
+}
+
+// Active rules for the in-progress match; defensive fallback if state.rules
+// was never snapshotted (e.g. legacy state restored without migration).
+function getRules() {
+    return state.rules || snapshotRules();
+}
+
+// ── Settings modal ───────────────────────────────────────────────────────
+function openSettingsModal() {
+    syncSettingsInputs();
+    const note = document.getElementById('settingsRuleNote');
+    note.classList.toggle('hidden', !(state.matchStarted && !state.matchOver));
+    document.getElementById('settingsModal').classList.remove('hidden');
+    track('settings_open');
+}
+
+function closeSettingsModal() {
+    document.getElementById('settingsModal').classList.add('hidden');
+}
+
+// ── Feedback modal ───────────────────────────────────────────────────────
+function openFeedbackModal() {
+    document.getElementById('feedbackModal').classList.remove('hidden');
+    track('feedback_open');
+    const statusEl = document.getElementById('feedbackStatus');
+    if (statusEl) { statusEl.className = 'feedback-status hidden'; statusEl.textContent = ''; }
+    updateFeedbackOnlineState();
+}
+
+function closeFeedbackModal() {
+    document.getElementById('feedbackModal').classList.add('hidden');
+    // Intentionally keep form contents on cancel per spec.
+}
+
+function updateFeedbackOnlineState() {
+    const submitBtn = document.getElementById('submitFeedback');
+    const statusEl = document.getElementById('feedbackStatus');
+    if (!submitBtn || !statusEl) return;
+
+    if (!navigator.onLine) {
+        submitBtn.disabled = true;
+        statusEl.textContent = "You're offline — connect to the internet to send feedback.";
+        statusEl.className = 'feedback-status'; // info styling (no error/success modifier)
+        statusEl.classList.remove('hidden');
+    } else {
+        submitBtn.disabled = false;
+        // Only hide the status if it was showing the offline notice.
+        // Don't clobber a success/error result that's currently visible.
+        if (statusEl.textContent === "You're offline — connect to the internet to send feedback.") {
+            statusEl.classList.add('hidden');
+            statusEl.textContent = '';
+        }
+    }
+}
+
+async function submitFeedback(e) {
+    e.preventDefault();
+
+    const form = document.getElementById('feedbackForm');
+    const messageInput = document.getElementById('feedbackMessage');
+    const emailInput = document.getElementById('feedbackEmail');
+    const botcheck = document.getElementById('feedbackBotcheck');
+    const statusEl = document.getElementById('feedbackStatus');
+    const submitBtn = document.getElementById('submitFeedback');
+
+    const message = messageInput.value.trim();
+    const email = emailInput.value.trim();
+    const category = (form.querySelector('input[name="feedbackCategory"]:checked') || {}).value || 'other';
+
+    // Clear previous status
+    statusEl.className = 'feedback-status hidden';
+    statusEl.textContent = '';
+
+    // Validate message
+    if (!message) {
+        statusEl.textContent = 'Please enter a message before sending.';
+        statusEl.className = 'feedback-status error';
+        statusEl.classList.remove('hidden');
+        messageInput.focus();
+        return;
+    }
+
+    // Validate email if provided
+    if (email && !emailInput.checkValidity()) {
+        statusEl.textContent = 'Please enter a valid email address, or leave it blank.';
+        statusEl.className = 'feedback-status error';
+        statusEl.classList.remove('hidden');
+        emailInput.focus();
+        return;
+    }
+
+    // Honeypot check: bot filled the hidden checkbox — fake success, no network call
+    if (botcheck.checked) {
+        statusEl.textContent = 'Thanks — feedback sent!';
+        statusEl.className = 'feedback-status success';
+        statusEl.classList.remove('hidden');
+        messageInput.value = '';
+        setTimeout(() => closeFeedbackModal(), 1500);
+        return;
+    }
+
+    // Submit to Web3Forms
+    submitBtn.disabled = true;
+    statusEl.textContent = 'Sending…';
+    statusEl.className = 'feedback-status';
+    statusEl.classList.remove('hidden');
+
+    try {
+        const res = await fetch(WEB3FORMS_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({
+                access_key: WEB3FORMS_ACCESS_KEY,
+                subject: `[Volleyball Referee] ${category} feedback`,
+                from_name: 'Volleyball Referee PWA',
+                category,
+                message,
+                email: email || undefined,
+                botcheck: false,
+                app_version: APP_VERSION,
+                display_mode: getDisplayMode(),
+                user_agent: navigator.userAgent.slice(0, 200)
+            })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data.success) {
+            track('feedback_submit', { category, has_email: !!email });
+            statusEl.textContent = 'Thanks — feedback sent!';
+            statusEl.className = 'feedback-status success';
+            statusEl.classList.remove('hidden');
+            messageInput.value = ''; // clear message; keep email
+            submitBtn.disabled = false;
+            setTimeout(() => closeFeedbackModal(), 1500);
+        } else {
+            track('feedback_error', { reason: `http_${res.status}` });
+            statusEl.textContent = "Couldn’t send — please try again.";
+            statusEl.className = 'feedback-status error';
+            statusEl.classList.remove('hidden');
+            submitBtn.disabled = false;
+        }
+    } catch (_) {
+        track('feedback_error', { reason: 'network' });
+        statusEl.textContent = "Couldn’t send — please try again.";
+        statusEl.className = 'feedback-status error';
+        statusEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+    }
+}
+
+function syncSettingsInputs() {
+    document.querySelectorAll('#settingsModal [data-setting]').forEach(input => {
+        const key = input.dataset.setting;
+        if (input.type === 'checkbox') {
+            input.checked = !!settings[key];
+        } else {
+            input.value = settings[key];
+        }
+    });
+
+    // Disable keepAwake toggle on browsers that don't support the Screen Wake Lock API
+    const keepAwakeInput = document.getElementById('setKeepAwake');
+    if (keepAwakeInput) {
+        const supported = 'wakeLock' in navigator;
+        keepAwakeInput.disabled = !supported;
+        let hint = document.getElementById('keepAwakeUnsupportedHint');
+        if (!supported) {
+            if (!hint) {
+                hint = document.createElement('span');
+                hint.id = 'keepAwakeUnsupportedHint';
+                hint.className = 'settings-hint';
+                hint.textContent = 'Not supported in this browser';
+                keepAwakeInput.insertAdjacentElement('afterend', hint);
+            }
+            hint.classList.remove('hidden');
+        } else if (hint) {
+            hint.classList.add('hidden');
+        }
+    }
+}
+
+function onSettingChange(input) {
+    const key = input.dataset.setting;
+    if (input.type === 'checkbox') {
+        settings[key] = !!input.checked;
+        if (key === 'keepAwake') {
+            if (settings.keepAwake && state.matchStarted && !state.matchOver) {
+                acquireWakeLock();
+            } else if (!settings.keepAwake) {
+                releaseWakeLock();
+            }
+        }
+    } else {
+        const n = parseInt(input.value, 10);
+        const range = SETTINGS_RANGES[key];
+        if (Number.isNaN(n)) {
+            input.value = settings[key]; // invalid → revert
+            return;
+        }
+        const clamped = range ? Math.min(range[1], Math.max(range[0], n)) : n;
+        settings[key] = clamped;
+        input.value = clamped; // reflect clamping back to the field
+    }
+    saveSettings();
+    track('settings_changed', { setting: key, value: String(settings[key]) });
+}
+
 function saveState() {
     try {
         const payload = { _schema: STORAGE_SCHEMA, state, rotationSetup: { ...rotationSetupState } };
@@ -158,7 +492,17 @@ function saveState() {
 // Each call must advance _schema by exactly one step (fromVersion → fromVersion+1).
 // Return the upgraded payload { _schema, state, rotationSetup } or null to discard.
 function migrate(saved, fromVersion) {
-    // no migrations defined yet
+    if (fromVersion === 2) {
+        const st = saved.state || {};
+        // Hardcoded v2-era values — do NOT use DEFAULT_SETTINGS here; a v2 match
+        // was definitionally played under the old fixed constants.
+        st.rules = {
+            timeoutDuration: 30, timeoutsPerSet: 2, technicalTimeouts: false,
+            setBreakDuration: 180, regularSetPoints: 25, finalSetPoints: 15
+        };
+        st.techTimeoutsFired = [];
+        return { _schema: 3, state: st, rotationSetup: saved.rotationSetup || null };
+    }
     return null;
 }
 
@@ -415,15 +759,18 @@ function restoreSavedMatch() {
     }
 
     if (onScoreboard && !state.matchOver && !state.deciderSideSwitched
-            && getPointsToWin() === FINAL_SET_POINTS
-            && (state.team1Score >= 8 || state.team2Score >= 8)) {
+            && isDeciderSet()
+            && (state.team1Score >= deciderSwitchPoint() || state.team2Score >= deciderSwitchPoint())) {
         showDeciderSwitchModal();
     }
+
+    if (matchIsLive()) acquireWakeLock();
 
     return true;
 }
 
 function init() {
+    loadSettings();
     track('launch', { display_mode: getDisplayMode(), online: navigator.onLine });
     initWebVitals();
     window.addEventListener('appinstalled', () => track('pwa_installed'));
@@ -458,6 +805,7 @@ function init() {
     });
 
     document.getElementById('startMatch').addEventListener('click', startMatch);
+    document.getElementById('shareResult').addEventListener('click', shareResult);
     document.getElementById('playAgain').addEventListener('click', resetToSetup);
     document.getElementById('undoPoint').addEventListener('click', undoLastPoint);
     document.getElementById('historyBtn').addEventListener('click', () => { track('history_open'); showHistoryModal(); });
@@ -466,6 +814,33 @@ function init() {
         if (e.target === document.getElementById('historyModal')) closeHistoryModal();
     });
     updateHistoryButton();
+
+    // Feedback modal
+    document.getElementById('feedbackBtn').addEventListener('click', openFeedbackModal);
+    document.getElementById('cancelFeedback').addEventListener('click', closeFeedbackModal);
+    document.getElementById('feedbackModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('feedbackModal')) closeFeedbackModal();
+    });
+    document.getElementById('feedbackForm').addEventListener('submit', submitFeedback);
+    window.addEventListener('online', updateFeedbackOnlineState);
+    window.addEventListener('offline', updateFeedbackOnlineState);
+
+    // Settings modal
+    document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
+    document.getElementById('closeSettings').addEventListener('click', closeSettingsModal);
+    document.getElementById('settingsModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('settingsModal')) closeSettingsModal();
+    });
+    document.getElementById('resetSettings').addEventListener('click', () => {
+        settings = { ...DEFAULT_SETTINGS };
+        saveSettings();
+        syncSettingsInputs();
+        if (settings.keepAwake && matchIsLive()) acquireWakeLock();
+        track('settings_reset');
+    });
+    document.querySelectorAll('#settingsModal [data-setting]').forEach(input => {
+        input.addEventListener('change', () => onSettingChange(input));
+    });
 
     document.querySelectorAll('.btn-score').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -511,6 +886,15 @@ function init() {
             saveState();
             track('use_prev_rotation', { team, set: state.currentSet });
         });
+    });
+
+    // SoundFX: unlock AudioContext on first gesture (required by browser autoplay policy)
+    ['pointerdown', 'keydown'].forEach(evt =>
+        document.addEventListener(evt, () => SoundFX.unlock(), { once: true, passive: true }));
+
+    // Wake Lock: re-acquire when tab becomes visible mid-match (OS may have released it)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && matchIsLive()) acquireWakeLock();
     });
 
     restoreSavedMatch();
@@ -559,25 +943,25 @@ function useTimeout(team) {
     if (team === 1 && state.team1Timeouts > 0) {
         state.team1Timeouts--;
         track('timeout_used', { team: 1, set: state.currentSet });
-        showTimeoutModal(state.team1Name);
+        showTimeoutModal({ title: `${state.team1Name} Timeout`, durationSec: getRules().timeoutDuration });
     } else if (team === 2 && state.team2Timeouts > 0) {
         state.team2Timeouts--;
         track('timeout_used', { team: 2, set: state.currentSet });
-        showTimeoutModal(state.team2Name);
+        showTimeoutModal({ title: `${state.team2Name} Timeout`, durationSec: getRules().timeoutDuration });
     }
     updateDisplay();
 }
 
-function showTimeoutModal(teamName) {
+function showTimeoutModal({ title, durationSec }) {
     const modal = document.getElementById('timeoutModal');
     const timerText = document.getElementById('timerText');
     const timerProgress = document.getElementById('timerProgress');
     const teamNameDisplay = document.getElementById('timeoutTeamName');
 
-    teamNameDisplay.textContent = `${teamName} Timeout`;
+    teamNameDisplay.textContent = title;
     modal.classList.remove('hidden');
 
-    const timeoutDurationMs = TIMEOUT_DURATION * 1000;
+    const timeoutDurationMs = durationSec * 1000;
     const startTime = performance.now();
     timerProgress.style.strokeDashoffset = 0;
 
@@ -597,6 +981,7 @@ function showTimeoutModal(teamName) {
             timerText.textContent = '0.00';
             clearInterval(timeoutInterval);
             timeoutInterval = null;
+            SoundFX.play('timeoutEnd');
             shakeModal(modal.querySelector('.modal-content'));
         }
     }, updateInterval);
@@ -625,7 +1010,7 @@ function showSetBreakModal(setNumber) {
     document.getElementById('scoreboard').classList.add('hidden');
     modal.classList.remove('hidden');
 
-    const setBreakDurationMs = SET_BREAK_DURATION * 1000;
+    const setBreakDurationMs = getRules().setBreakDuration * 1000;
     const startTime = performance.now();
     timerProgress.style.strokeDashoffset = 0;
 
@@ -647,6 +1032,7 @@ function showSetBreakModal(setNumber) {
             timerText.textContent = '0:00';
             clearInterval(setBreakInterval);
             setBreakInterval = null;
+            SoundFX.play('timeoutEnd');
             shakeModal(modal.querySelector('.modal-content'));
         }
     }, updateInterval);
@@ -1069,8 +1455,9 @@ function swapTeams() {
 function maybeTriggerDeciderSwitch() {
     if (state.deciderSideSwitched) return;
     if (state.matchOver) return;
-    if (getPointsToWin() !== FINAL_SET_POINTS) return;
-    if (state.team1Score < 8 && state.team2Score < 8) return;
+    if (!isDeciderSet()) return;
+    const sw = deciderSwitchPoint();
+    if (state.team1Score < sw && state.team2Score < sw) return;
     showDeciderSwitchModal();
 }
 
@@ -1087,6 +1474,26 @@ function showDeciderSwitchModal() {
         `<span style="color:${t2Color}">${escapeHtml(state.team2Name)} ${state.team2Score}</span>`;
     vibrateDevice([300, 100, 300, 100, 500]);
     document.getElementById('deciderSwitchModal').classList.remove('hidden');
+}
+
+function maybeTriggerTechnicalTimeout() {
+    const rules = getRules();
+    if (!rules.technicalTimeouts) return;
+    if (state.matchOver || isDeciderSet()) return;
+    const leadScore = Math.max(state.team1Score, state.team2Score);
+    for (const threshold of TECH_TIMEOUT_THRESHOLDS) {
+        if (threshold >= rules.regularSetPoints) continue;        // degenerate-config guard
+        if (leadScore >= threshold && !state.techTimeoutsFired.includes(threshold)) {
+            state.techTimeoutsFired.push(threshold);              // mark BEFORE showing (sticky)
+            track('technical_timeout', { set: state.currentSet, threshold,
+                t1_score: state.team1Score, t2_score: state.team2Score });
+            vibrateDevice([250]);
+            SoundFX.play('techTimeout');
+            saveState();
+            showTimeoutModal({ title: 'Technical Timeout', durationSec: TECH_TIMEOUT_DURATION });
+            return;
+        }
+    }
 }
 
 function closeDeciderSwitchModal() {
@@ -1220,6 +1627,7 @@ function escapeHtml(str) {
 }
 
 function vibrateDevice(pattern) {
+    if (!settings.vibration) return;
     try {
         if (navigator.vibrate) navigator.vibrate(pattern);
     } catch (_) {}
@@ -1242,7 +1650,7 @@ function shakeModal(contentEl) {
     _alertContentEl = contentEl;
 
     function pulse() {
-        try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (_) {}
+        vibrateDevice([200, 100, 200]);
         contentEl.classList.remove('modal-shake');
         void contentEl.offsetWidth;
         contentEl.classList.add('modal-shake');
@@ -1500,6 +1908,11 @@ function beginMatch() {
     state.lastStartingRotation1 = savedLast1;
     state.lastStartingRotation2 = savedLast2;
 
+    state.rules = snapshotRules();
+    state.techTimeoutsFired = [];
+    state.team1Timeouts = state.rules.timeoutsPerSet;
+    state.team2Timeouts = state.rules.timeoutsPerSet;
+
     document.getElementById('setup').classList.add('hidden');
     document.getElementById('rotationSetup').classList.add('hidden');
     document.getElementById('scoreboard').classList.remove('hidden');
@@ -1518,9 +1931,14 @@ function beginMatch() {
         sets_to_win: state.setsToWin,
         has_rotation: state.hasRotation,
         t1_players: state.team1Players.length,
-        t2_players: state.team2Players.length
+        t2_players: state.team2Players.length,
+        timeouts_per_set: state.rules.timeoutsPerSet,
+        regular_set_points: state.rules.regularSetPoints,
+        final_set_points: state.rules.finalSetPoints,
+        technical_timeouts: state.rules.technicalTimeouts
     });
 
+    acquireWakeLock();
     updateDisplay();
 }
 
@@ -1531,8 +1949,10 @@ function resetMatchState() {
     state.team2Score = 0;
     state.team1Sets = 0;
     state.team2Sets = 0;
-    state.team1Timeouts = 2;
-    state.team2Timeouts = 2;
+    state.team1Timeouts = settings.timeoutsPerSet;
+    state.team2Timeouts = settings.timeoutsPerSet;
+    state.rules = null;
+    state.techTimeoutsFired = [];
     state.setHistory = [];
     state.pointHistory = [];
     state.currentSetPoints = [];
@@ -1558,6 +1978,7 @@ function resetMatchState() {
 }
 
 function resetToSetup() {
+    releaseWakeLock();
     document.getElementById('setup').classList.remove('hidden');
     document.getElementById('scoreboard').classList.add('hidden');
     document.getElementById('matchResult').classList.add('hidden');
@@ -1565,9 +1986,17 @@ function resetToSetup() {
     resetMatchState();
 }
 
+function isDeciderSet() {
+    return state.currentSet === state.matchType;
+}
+
+function deciderSwitchPoint() {
+    return Math.ceil(getRules().finalSetPoints / 2);
+}
+
 function getPointsToWin() {
-    const isFinalSet = state.currentSet === state.matchType;
-    return isFinalSet ? FINAL_SET_POINTS : REGULAR_SET_POINTS;
+    const r = getRules();
+    return isDeciderSet() ? r.finalSetPoints : r.regularSetPoints;
 }
 
 function addPoint(team) {
@@ -1619,6 +2048,7 @@ function addPoint(team) {
     checkSetWin();
     updateDisplay();
     maybeTriggerDeciderSwitch();
+    maybeTriggerTechnicalTimeout();
 }
 
 function checkSetWin() {
@@ -1686,8 +2116,8 @@ function checkSetWin() {
             state.currentSet++;
             state.team1Score = 0;
             state.team2Score = 0;
-            state.team1Timeouts = 2;
-            state.team2Timeouts = 2;
+            state.team1Timeouts = getRules().timeoutsPerSet;
+            state.team2Timeouts = getRules().timeoutsPerSet;
             state.team1Subs = {};
             state.team2Subs = {};
             state.team1LiberoIn = null;
@@ -1696,9 +2126,12 @@ function checkSetWin() {
             state.serving = (state.currentSet % 2 === 1) ? 1 : 2;
             state.firstServer = state.serving;
             state.deciderSideSwitched = false;
+            state.techTimeoutsFired = [];
 
             switchSides();
 
+            SoundFX.play('setEnd');
+            vibrateDevice([200, 100, 200]);
             showSetBreakModal(state.currentSet);
         }
     }
@@ -1791,6 +2224,9 @@ function endMatch({ fromRestore = false } = {}) {
             went_to_decider: state.setHistory.length === (state.matchType === 3 ? 3 : 5),
             duration_sec: state.matchDurationSec != null ? state.matchDurationSec : null
         });
+        SoundFX.play('matchEnd');
+        vibrateDevice([300, 120, 300, 120, 600]);
+        releaseWakeLock();
     }
 
     document.getElementById('scoreboard').classList.add('hidden');
@@ -1819,6 +2255,63 @@ function endMatch({ fromRestore = false } = {}) {
     document.getElementById('finalScore').innerHTML = scoreHTML;
 }
 
+function buildResultSummary() {
+    const t1Won = state.team1Sets > state.team2Sets;
+    const winner = t1Won ? state.team1Name : state.team2Name;
+    const loser  = t1Won ? state.team2Name : state.team1Name;
+    const setsW  = Math.max(state.team1Sets, state.team2Sets);
+    const setsL  = Math.min(state.team1Sets, state.team2Sets);
+    const sets = state.setHistory.map(s =>
+        t1Won ? `${s.team1Score}-${s.team2Score}` : `${s.team2Score}-${s.team1Score}`).join(', ');
+    const url = location.origin + location.pathname;
+    return `🏐 ${winner} def. ${loser} ${setsW}-${setsL} (${sets})\nScored with Volleyball Referee — ${url}`;
+}
+
+async function shareResult() {
+    const text = buildResultSummary();
+    if (navigator.share) {
+        try {
+            await navigator.share({ text });
+            track('result_shared', { method: 'share' });
+        } catch (err) {
+            if (err && err.name !== 'AbortError') track('share_error', { reason: 'share_failed' });
+        }
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(text);
+        track('result_shared', { method: 'clipboard' });
+        flashButtonLabel('shareResult', 'Copied!');
+    } catch (_) {
+        track('share_error', { reason: 'clipboard_failed' });
+        flashButtonLabel('shareResult', 'Copy failed');
+    }
+}
+
+const originalButtonLabels = {};
+
+function flashButtonLabel(id, label) {
+    const button = document.getElementById(id);
+    if (!button) return;
+
+    if (!originalButtonLabels[id]) {
+        originalButtonLabels[id] = button.textContent;
+    }
+
+    const originalLabel = originalButtonLabels[id];
+
+    if (button.dataset.flashTimer) {
+        clearTimeout(button.dataset.flashTimer);
+    }
+
+    button.textContent = label;
+
+    button.dataset.flashTimer = setTimeout(() => {
+        button.textContent = originalLabel;
+        delete button.dataset.flashTimer;
+    }, 1500);
+}
+
 function undoLastPoint() {
     if (state.pointHistory.length === 0) return;
     track('undo_point', { set: state.currentSet });
@@ -1845,10 +2338,12 @@ function undoLastPoint() {
 
 function updateTimeoutDots(team, timeoutsLeft) {
     const container = document.getElementById(`timeoutDots${team}`);
-    const dots = container.querySelectorAll('.timeout-dot');
-    dots.forEach((dot, index) => {
-        dot.classList.toggle('active', index < timeoutsLeft);
-    });
+    const total = getRules().timeoutsPerSet;
+    let html = '';
+    for (let i = 0; i < total; i++) {
+        html += `<span class="timeout-dot${i < timeoutsLeft ? ' active' : ''}"></span>`;
+    }
+    container.innerHTML = html;
 }
 
 function updateRotationDisplay(team, rotation, captain, libero, isServing) {
@@ -1975,8 +2470,22 @@ function updateDisplay() {
     const serveBall = document.getElementById('serveBall');
     serveBall.classList.toggle('right', state.serving === 2);
 
+    // Set --serve-rgb to match the serving team's identity color
+    const serveIndicatorEl = document.getElementById('serveIndicator');
+    const sideId = state.serving === 1 ? state.team1OriginalId : state.team2OriginalId;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const serveRgb = sideId === 'A'
+        ? rootStyle.getPropertyValue('--team1-rgb').trim()
+        : rootStyle.getPropertyValue('--team2-rgb').trim();
+    serveIndicatorEl.style.setProperty('--serve-rgb', serveRgb);
+
     updateTimeoutDots(1, state.team1Timeouts);
     updateTimeoutDots(2, state.team2Timeouts);
+
+    const timeoutsEnabled = getRules().timeoutsPerSet > 0;
+    document.querySelectorAll('.timeout-container').forEach(el => {
+        el.classList.toggle('hidden', !timeoutsEnabled);
+    });
 
     document.getElementById('timeout1').disabled = state.team1Timeouts === 0;
     document.getElementById('timeout2').disabled = state.team2Timeouts === 0;

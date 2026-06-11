@@ -26,7 +26,15 @@
     </script>
 </head>
 <body>
-    <button id="historyBtn" class="history-btn" style="display:none">History</button>
+    <div class="top-actions">
+        <button id="feedbackBtn" class="top-btn" aria-label="Send feedback" title="Send feedback">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        </button>
+        <button id="settingsBtn" class="top-btn" aria-label="Settings" title="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button id="historyBtn" class="top-btn" style="display:none">History</button>
+    </div>
     <div class="container">
         <h1>Volleyball Referee</h1>
 
@@ -173,10 +181,7 @@
                         <button class="timeout-btn" id="timeout1" data-team="1" title="Call timeout">
                             <img src="icons/timer.png" alt="Timeout" class="timeout-icon">
                         </button>
-                        <div class="timeout-dots" id="timeoutDots1">
-                            <span class="timeout-dot active"></span>
-                            <span class="timeout-dot active"></span>
-                        </div>
+                        <div class="timeout-dots" id="timeoutDots1"></div>
                     </div>
                     <div class="rotation-grid" id="rotation1">
                         <div class="rotation-row front-row">
@@ -195,13 +200,13 @@
                 </div>
 
                 <div class="vs-container">
-                    <div class="undo-btn" id="undoPoint" title="Undo last point">
+                    <div class="undo-btn" id="undoPoint" title="Undo last point" tabindex="0" role="button">
                         <img src="icons/undo.png" alt="Undo" class="undo-icon">
                     </div>
-                    <div class="swap-teams" id="swapTeams" title="Swap teams">
+                    <div class="swap-teams" id="swapTeams" title="Swap teams" tabindex="0" role="button">
                         <img src="icons/swap.png" alt="Swap teams" class="swap-icon">
                     </div>
-                    <div class="serve-indicator" id="serveIndicator" title="Click to switch service">
+                    <div class="serve-indicator" id="serveIndicator" title="Click to switch service" tabindex="0" role="button">
                         <img src="icons/volleyball.png" alt="Service" class="serve-ball" id="serveBall">
                     </div>
                     <div class="vs">VS</div>
@@ -214,10 +219,7 @@
                         <button class="timeout-btn" id="timeout2" data-team="2" title="Call timeout">
                             <img src="icons/timer.png" alt="Timeout" class="timeout-icon">
                         </button>
-                        <div class="timeout-dots" id="timeoutDots2">
-                            <span class="timeout-dot active"></span>
-                            <span class="timeout-dot active"></span>
-                        </div>
+                        <div class="timeout-dots" id="timeoutDots2"></div>
                     </div>
                     <div class="rotation-grid" id="rotation2">
                         <div class="rotation-row front-row">
@@ -260,7 +262,10 @@
             <h2>Match Complete!</h2>
             <div id="winner" class="winner"></div>
             <div id="finalScore" class="final-score"></div>
-            <button id="playAgain" class="btn btn-primary">Play Again</button>
+            <div class="result-actions">
+                <button id="shareResult" class="btn btn-secondary">Share Result</button>
+                <button id="playAgain" class="btn btn-primary">Play Again</button>
+            </div>
         </div>
     </div>
 
@@ -333,7 +338,83 @@
         </div>
     </div>
 
-    <footer class="credits">v3.09 | Created by Menon Pranto</footer>
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content settings-modal-content">
+            <h2>Settings</h2>
+            <p id="settingsRuleNote" class="settings-note hidden">Match in progress — rule changes apply to the next match.</p>
+
+            <h3 class="settings-section">Match Rules</h3>
+            <div class="settings-grid">
+                <label for="setTimeoutDuration">Timeout duration (sec)</label>
+                <input type="number" id="setTimeoutDuration" data-setting="timeoutDuration" inputmode="numeric" min="10" max="120" step="5">
+
+                <label for="setTimeoutsPerSet">Timeouts per team per set</label>
+                <input type="number" id="setTimeoutsPerSet" data-setting="timeoutsPerSet" inputmode="numeric" min="0" max="4" step="1">
+
+                <label for="setSetBreakDuration">Set break (sec)</label>
+                <input type="number" id="setSetBreakDuration" data-setting="setBreakDuration" inputmode="numeric" min="30" max="600" step="30">
+
+                <label for="setRegularSetPoints">Points per regular set</label>
+                <input type="number" id="setRegularSetPoints" data-setting="regularSetPoints" inputmode="numeric" min="5" max="50" step="1">
+
+                <label for="setFinalSetPoints">Points per deciding set</label>
+                <input type="number" id="setFinalSetPoints" data-setting="finalSetPoints" inputmode="numeric" min="5" max="50" step="1">
+
+                <label for="setTechnicalTimeouts">Technical timeouts (8 &amp; 16 pts, 60s)</label>
+                <input type="checkbox" class="switch" id="setTechnicalTimeouts" data-setting="technicalTimeouts">
+            </div>
+
+            <h3 class="settings-section">App</h3>
+            <div class="settings-grid">
+                <label for="setSound">Whistle sounds</label>
+                <input type="checkbox" class="switch" id="setSound" data-setting="sound">
+
+                <label for="setVibration">Vibration</label>
+                <input type="checkbox" class="switch" id="setVibration" data-setting="vibration">
+
+                <label for="setKeepAwake">Keep screen awake during match</label>
+                <input type="checkbox" class="switch" id="setKeepAwake" data-setting="keepAwake">
+            </div>
+
+            <div class="settings-buttons">
+                <button class="btn btn-secondary" id="resetSettings">Reset to Defaults</button>
+                <button class="btn btn-primary" id="closeSettings">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="feedbackModal" class="modal hidden">
+      <div class="modal-content feedback-modal-content">
+        <h2>Send Feedback</h2>
+        <form id="feedbackForm" novalidate>
+          <div class="feedback-field">
+            <span class="feedback-label">Category</span>
+            <div class="radio-group">
+              <label><input type="radio" name="feedbackCategory" value="bug" checked> Bug</label>
+              <label><input type="radio" name="feedbackCategory" value="suggestion"> Suggestion</label>
+              <label><input type="radio" name="feedbackCategory" value="other"> Other</label>
+            </div>
+          </div>
+          <div class="feedback-field">
+            <label class="feedback-label" for="feedbackMessage">Message</label>
+            <textarea id="feedbackMessage" rows="5" maxlength="2000" required placeholder="What happened, or what would you like to see?"></textarea>
+          </div>
+          <div class="feedback-field">
+            <label class="feedback-label" for="feedbackEmail">Email (optional, for a reply)</label>
+            <input type="email" id="feedbackEmail" autocomplete="email" placeholder="you@example.com">
+          </div>
+          <!-- Web3Forms native honeypot: hidden from humans, bots fill/check it -->
+          <input type="checkbox" name="botcheck" id="feedbackBotcheck" class="feedback-honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <p id="feedbackStatus" class="feedback-status hidden" role="status"></p>
+          <div class="confirm-buttons">
+            <button type="button" class="btn btn-secondary" id="cancelFeedback">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="submitFeedback">Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <footer class="credits">v4.00 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
     <script>
