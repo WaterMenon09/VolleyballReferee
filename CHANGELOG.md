@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## [v4.01] - 2026-06-11
+
+### Fixed
+
+- **Feedback form delivery**: replaced `WEB3FORMS_ACCESS_KEY` placeholder with a live
+  key so submissions now reach the owner's inbox. (Previously the API rejected every
+  submission silently.)
+- **Service worker cache bust**: bumped `VERSION` in `sw.js` to `v4.0.1` so existing
+  clients evict the stale `vbref-v4.0.0` cache and receive the corrected `app.js`.
+
 ## [v4.00] - 2026-06-11
 
 ### Added
