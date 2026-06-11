@@ -98,7 +98,7 @@ const HISTORY_MAX = 50;
 const APP_VERSION = 'v4.00';
 
 // ── Feedback (Web3Forms) ──────────────────────────────────────────────────
-const WEB3FORMS_ACCESS_KEY = 'REPLACE_WITH_WEB3FORMS_ACCESS_KEY'; // TODO(owner): paste key from web3forms.com
+const WEB3FORMS_ACCESS_KEY = '24f54e6d-d6a5-4b1e-82bf-7952024d7886'; // TODO(owner): paste key from web3forms.com
 const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit';
 
 const ANALYTICS_DISABLED = (() => {
