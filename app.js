@@ -95,7 +95,7 @@ const STORAGE_SCHEMA = 3;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.01';
+const APP_VERSION = 'v4.10';
 
 // ── Feedback (Web3Forms) ──────────────────────────────────────────────────
 const WEB3FORMS_ACCESS_KEY = '24f54e6d-d6a5-4b1e-82bf-7952024d7886'; // TODO(owner): paste key from web3forms.com
@@ -2178,7 +2178,7 @@ function renderSetChart(set) {
         if (idx > 0) {
             const x = toX(idx);
             ticks += `<line x1="${x}" y1="${dataH - 1}" x2="${x}" y2="${dataH + 4}" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>`;
-            ticks += `<text x="${x}" y="${svgH - 2}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.38)" font-family="Barlow Semi Condensed,sans-serif">${score}</text>`;
+            ticks += `<text x="${x}" y="${svgH - 2}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.38)" font-family="Saira Semi Condensed,sans-serif">${score}</text>`;
         }
     }
 
@@ -2432,6 +2432,21 @@ function updateTeamColors() {
         applyTeamStyle(team1Container, team1ScoreEl, team2Color, team2RgbVal, timeline1, 'team2');
         applyTeamStyle(team2Container, team2ScoreEl, team1Color, team1RgbVal, timeline2, 'team1');
     }
+
+    // v4.10: expose side-mapped color + readable ink for CSS (score buttons, plates)
+    const rootCS = getComputedStyle(document.documentElement);
+    const rgbA = rootCS.getPropertyValue('--team1-rgb').trim();
+    const rgbB = rootCS.getPropertyValue('--team2-rgb').trim();
+    const inkFor = rgb => {
+        const [r, g, b] = rgb.split(',').map(Number);
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#0a1437' : '#ffffff';
+    };
+    const side1 = state.team1OriginalId === 'A' ? rgbA : rgbB;
+    const side2 = state.team2OriginalId === 'A' ? rgbA : rgbB;
+    document.documentElement.style.setProperty('--side1-rgb', side1);
+    document.documentElement.style.setProperty('--side2-rgb', side2);
+    document.documentElement.style.setProperty('--side1-ink', inkFor(side1));
+    document.documentElement.style.setProperty('--side2-ink', inkFor(side2));
 }
 
 function pulseScore(el) {

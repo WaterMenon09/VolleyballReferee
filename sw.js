@@ -1,4 +1,4 @@
-const VERSION = 'v4.0.1';
+const VERSION = 'v4.1.0';
 const CACHE = `vbref-${VERSION}`;
 // Add every new app-shell asset here or it will not be available offline.
 const APP_SHELL = [
@@ -8,9 +8,12 @@ const APP_SHELL = [
   './app.js',
   './manifest.webmanifest',
   './icons/volleyball.png',
-  './icons/swap.png',
-  './icons/timer.png',
-  './icons/undo.png'
+  './fonts/display-600.woff2',
+  './fonts/display-800.woff2',
+  './fonts/body-400.woff2',
+  './fonts/body-500.woff2',
+  './fonts/body-600.woff2',
+  './fonts/body-700.woff2'
 ];
 
 self.addEventListener('install', e => {

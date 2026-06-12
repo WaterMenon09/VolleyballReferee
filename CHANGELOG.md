@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.10 — 2026-06-12
+
+### Changed — full UI/UX revamp ("Stadium Night: Broadcast Edition")
+- New typography: Big Shoulders Display + Saira Semi Condensed, self-hosted woff2 (works offline; Google Fonts dependency removed)
+- New design-token system (palette unchanged): spacing/radius/type/motion/elevation scales
+- Fixed app bar with brand wordmark replaces floating title and action buttons
+- Broadcast-style scoreboard: fluid hero scores, team-color +1 buttons with auto-contrast text, center score bug, set chips
+- Rotation screens drawn as real court diagrams (net strip, attack line, zone tiles)
+- Unified modal shell: blurred backdrop, bottom sheets on phones, consistent headers
+- All PNG UI icons replaced with inline SVG; emoji icons removed
+- Component library: segmented controls, redesigned inputs/switches/buttons, gold focus rings
+- Motion pass: score pop, screen entrances, serve glow; full prefers-reduced-motion support
+
+### Internal
+- Service worker v4.1.0: fonts precached, dead PNG icons dropped from APP_SHELL
+- Legacy CSS variables being retired in favor of tokens (completed in this release)
+
 ## [v4.01] - 2026-06-11
 
 ### Fixed

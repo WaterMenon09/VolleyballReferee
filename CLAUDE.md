@@ -21,6 +21,7 @@ The app is a single-page vanilla JS application with three source files plus PWA
 - `app.js` — all logic; single file, no modules
 - `manifest.webmanifest` — installability metadata; relative `start_url`/`scope` resolve correctly under the `/VolleyballReferee/` GitHub Pages subpath
 - `sw.js` — service worker (see PWA / offline section below)
+- `fonts/` — self-hosted woff2 (Big Shoulders Display 600/800, Saira Semi Condensed 400–700); every file is listed in sw.js APP_SHELL
 
 ### Screen flow
 
@@ -66,7 +67,7 @@ The server occupies position 1 (index 0, back-right). The `rotateTeam()` functio
 
 ### Team color identity
 
-Teams are assigned a permanent color identity: 'A' and 'B'. Colors are stored in CSS variables `--team1-color` / `--team2-color` (user-editable via color picker in setup, persisted in `localStorage`). `state.team1OriginalId` and `state.team2OriginalId` track which identity ('A'/'B') each side holds, even after swaps. Colors are applied in `updateTeamColors()` and `updateRotationSetupColors()` by checking `originalId`, not position number.
+Teams are assigned a permanent color identity: 'A' and 'B'. Colors are stored in CSS variables `--team1-color` / `--team2-color` (user-editable via color picker in setup, persisted in `localStorage`). `state.team1OriginalId` and `state.team2OriginalId` track which identity ('A'/'B') each side holds, even after swaps. Colors are applied in `updateTeamColors()` and `updateRotationSetupColors()` by checking `originalId`, not position number. v4.10: side-mapped `--side1-rgb/--side2-rgb/--side1-ink/--side2-ink` custom props are derived in `updateTeamColors()` — ink flips to dark navy when the team color is light (luminance > 0.62).
 
 ### Side-swap vs. team-swap
 
@@ -86,7 +87,11 @@ When a set ends, `checkSetWin()` calls `showSetBreakModal(nextSetNumber)` which 
 
 `manifest.webmanifest` — installability metadata; relative `start_url`/`scope` (`"./"`) resolve correctly under the `/VolleyballReferee/` GitHub Pages subpath and also work for local server testing.
 
-`sw.js` — service worker. Cache name is `vbref-v${VERSION}`; **bump `VERSION` in `sw.js` to invalidate all clients on the next deploy** and force re-download of updated assets. `APP_SHELL` lists every file precached at install — **add new CSS, JS, or icon files here or they will not be available offline**. HTML navigations use network-first (fresh on online reload, cached fallback offline). All other same-origin assets use cache-first. Cross-origin requests (Google Fonts, Analytics) are not intercepted and not cached — they silently fail offline, which is acceptable. Note: the v4.00 release did not add any new files to `APP_SHELL` — whistle sounds are synthesized via Web Audio API at runtime, and new icons use inline SVG — so the precache list is unchanged.
+`sw.js` — service worker. Cache name is `vbref-v${VERSION}`; **bump `VERSION` in `sw.js` to invalidate all clients on the next deploy** and force re-download of updated assets. `APP_SHELL` lists every file precached at install — **add new CSS, JS, or icon files here or they will not be available offline**. The six font files in `fonts/` are precached; Google Fonts is no longer used. HTML navigations use network-first (fresh on online reload, cached fallback offline). All other same-origin assets use cache-first. Cross-origin requests (Analytics) are not intercepted and not cached — they silently fail offline, which is acceptable.
+
+### Design tokens (v4.10)
+
+`styles.css` opens with a design-token `:root` block (spacing `--sp-*`, radii `--r-*`, surfaces `--surface-1/2/3`, strokes `--stroke-1/2/3`, ink opacities `--ink-*`, gold/navy palette, motion `--dur-*/--ease-*`). Use tokens — never raw rgba values — for new surfaces/strokes/spacing. A fixed app bar (`.app-bar`) replaces the old floating h1/.top-actions. `updateTeamColors()` additionally writes side-mapped custom props `--side1-rgb/--side2-rgb/--side1-ink/--side2-ink` on `:root`; scoreboard CSS consumes them via `.team.team1/.team.team2 { --side-rgb; --side-ink }`. The `prefers-reduced-motion` block must remain the LAST rule in `styles.css`.
 
 ### Deciding-set side switch
 
