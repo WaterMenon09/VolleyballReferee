@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.11 — 2026-06-13
+
+### Fixed
+- Libero can now be subbed into position 1 (back-right) while their team is receiving — previously blocked unconditionally, which violated FIVB rules (position 1 is only restricted when the team is serving)
+- Manual serve-indicator tap while a team has its libero at position 1 (receiving) now auto-evicts the libero before rendering, preventing an illegal server display
+
 ## v4.10 — 2026-06-12
 
 ### Changed — full UI/UX revamp ("Stadium Night: Broadcast Edition")

@@ -95,7 +95,7 @@ const STORAGE_SCHEMA = 3;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.10';
+const APP_VERSION = 'v4.11';
 
 // ── Feedback (Web3Forms) ──────────────────────────────────────────────────
 const WEB3FORMS_ACCESS_KEY = '24f54e6d-d6a5-4b1e-82bf-7952024d7886'; // TODO(owner): paste key from web3forms.com
@@ -905,6 +905,10 @@ function toggleService() {
     if (state.currentSetPoints.length === 0) {
         state.firstServer = state.serving;
     }
+    // Libero cannot serve: if serve is manually switched onto a team that has its
+    // libero at position 1 (legal while receiving), evict it so the original player
+    // is the server — mirrors the automatic eviction that rotateTeam does on a side-out.
+    checkLiberoAtServer(state.serving);
     updateDisplay();
 }
 
@@ -1113,7 +1117,10 @@ function showSubModal(team, position) {
     }
 
     if (libero && !playersOnCourt.includes(libero)) {
-        if (isBackRow && position !== 1) {
+        const teamIsServing = state.serving === team;
+        if (isBackRow && !(position === 1 && teamIsServing)) {
+            // Back-row spot the libero may occupy. Position 1 is allowed while receiving;
+            // only barred when this team is serving (the libero cannot serve, FIVB 19.3.2.5).
             fragment.appendChild(makeSubEl(libero, ['libero'], { 'data-is-libero': 'true', title: 'Libero' }));
         } else if (position === 1) {
             fragment.appendChild(makeSubEl(libero, ['libero', 'disabled'], { title: 'Libero cannot serve (FIVB rule 19.3.2.5)' }));
@@ -1169,10 +1176,11 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
 
     let subType;
     if (isLibero) {
-        // FIVB rule 19.3.2.5: the libero cannot serve. Position 1 (rotationIndex 0)
-        // is the server, so reject the substitution at this layer too — the UI
-        // already disables the option, this is defence-in-depth.
-        if (rotationIndex === 0) {
+        // FIVB rule 19.3.2.5: the libero cannot serve. Reject only when index 0 is
+        // the live server (this team is serving). While receiving, position 1 is a
+        // legal back-row spot — the side-out rotation will carry the libero off it
+        // before this team ever serves. This is defence-in-depth; the UI gates it too.
+        if (rotationIndex === 0 && state.serving === team) {
             return;
         }
         if (team === 1) {
