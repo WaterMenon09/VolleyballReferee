@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.12 — 2026-08-05
+
+Polish release addressing eight pieces of end-user feedback on the v4.10 build. No scoring-logic changes.
+
+### Added
+- "Match Settings" button on the setup screen — settings were previously only reachable via the app-bar gear, which users weren't finding (the gear stays where it is)
+- "Return to Setup" button on the rotation-setup screen — you're no longer forced to finish assigning positions before going back to fix a setup mistake. Pre-match it returns directly; mid-match (set 2+) it asks for confirmation first
+- Serve indicator now responds to Enter/Space when focused, so the control is reachable by keyboard and assistive tech
+
+### Changed
+- Manually switching the serving team mid-set now asks for confirmation. Serve already follows the score automatically, so an accidental tap was a real source of scoring confusion. Switching is still free at 0–0, before any point is played
+- Timeout countdown shows whole seconds instead of centiseconds — the rapidly changing digits made the timer visibly jitter. The progress ring still animates smoothly. The countdown now rounds up rather than down, so it starts at the full duration and reaches zero only at expiry (rounding down was harmless while centiseconds were displayed, but would have shown "29" immediately and hit "0" a second early once they were dropped)
+- The "rule changes apply to the next match" note now sits under the *Match Rules* heading instead of above it, where it read as if it applied to every setting
+
+### Fixed
+- The timeout button visually clipped the team colour bar above it
+- Point timeline never actually auto-scrolled to the newest point — the scroll was applied to a container that cannot scroll, so long rallies scrolled out of view and stayed there
+- Point timeline no longer pops a scrollbar into view once points overflow; the edge fade remains as the overflow cue
+- Settings and feedback modals scrolled the rounded outer container, so the scrollbar track was clipped at the corners. Both now scroll an inner region with the heading and buttons pinned, matching the match-history modal. The feedback submit status can no longer be scrolled out of view as it appears
+
+### Internal
+- Service worker v4.1.2 (cache invalidation); `APP_SHELL` unchanged, no new files
+- Persisted state shape untouched — `STORAGE_SCHEMA` stays 3
+- The service worker no longer registers on `localhost`/`127.0.0.1`, and actively unregisters any leftover registration and clears its caches there. Cache-first serving was handing back stale CSS/JS during local development and masking edits — it caused false verification failures twice while testing this release. Production behaviour is unchanged
+
 ## v4.11 — 2026-06-13
 
 ### Fixed

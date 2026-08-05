@@ -83,6 +83,7 @@ const TIMER_CIRCLE_RADIUS = 45; // SVG circle radius from viewBox
 const TIMER_CIRCLE_CIRCUMFERENCE = 2 * Math.PI * TIMER_CIRCLE_RADIUS;
 
 let timeoutInterval = null;
+let timeoutPrevSeconds = -1;
 let setBreakInterval = null;
 let vibrateInterval = null;
 let _alertContentEl = null;
@@ -95,7 +96,7 @@ const STORAGE_SCHEMA = 3;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.11';
+const APP_VERSION = 'v4.12';
 
 // ── Feedback (Web3Forms) ──────────────────────────────────────────────────
 const WEB3FORMS_ACCESS_KEY = '24f54e6d-d6a5-4b1e-82bf-7952024d7886'; // TODO(owner): paste key from web3forms.com
@@ -850,6 +851,12 @@ function init() {
     });
 
     document.getElementById('serveIndicator').addEventListener('click', toggleService);
+    document.getElementById('serveIndicator').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleService();
+        }
+    });
     document.getElementById('swapTeams').addEventListener('click', () => { track('swap_teams_manual', { set: state.currentSet }); swapTeams(); });
 
     document.getElementById('timeout1').addEventListener('click', () => useTimeout(1));
@@ -862,6 +869,10 @@ function init() {
     document.getElementById('cancelReturnToSetup').addEventListener('click', closeReturnToSetupModal);
     document.getElementById('confirmReturnToSetup').addEventListener('click', confirmReturnToSetup);
     document.getElementById('confirmDeciderSwitch').addEventListener('click', closeDeciderSwitchModal);
+    document.getElementById('cancelServeSwitch').addEventListener('click', closeServeSwitchModal);
+    document.getElementById('confirmServeSwitch').addEventListener('click', confirmServeSwitch);
+    document.getElementById('returnToSetupFromRotation').addEventListener('click', returnToSetupFromRotation);
+    document.getElementById('openSettingsFromSetup').addEventListener('click', openSettingsModal);
 
     document.querySelectorAll('.rotation-setup-pos').forEach(pos => {
         pos.addEventListener('click', handlePositionClick);
@@ -901,6 +912,15 @@ function init() {
 }
 
 function toggleService() {
+    if (state.currentSetPoints.length === 0) {
+        // Free switch: no points played yet in this set, so there is nothing to confirm.
+        performServiceSwitch();
+    } else {
+        openServeSwitchModal();
+    }
+}
+
+function performServiceSwitch() {
     state.serving = state.serving === 1 ? 2 : 1;
     if (state.currentSetPoints.length === 0) {
         state.firstServer = state.serving;
@@ -910,6 +930,19 @@ function toggleService() {
     // is the server — mirrors the automatic eviction that rotateTeam does on a side-out.
     checkLiberoAtServer(state.serving);
     updateDisplay();
+}
+
+function openServeSwitchModal() {
+    document.getElementById('serveSwitchModal').classList.remove('hidden');
+}
+
+function closeServeSwitchModal() {
+    document.getElementById('serveSwitchModal').classList.add('hidden');
+}
+
+function confirmServeSwitch() {
+    performServiceSwitch();
+    closeServeSwitchModal();
 }
 
 function rotateTeam(team) {
@@ -968,21 +1001,24 @@ function showTimeoutModal({ title, durationSec }) {
     const timeoutDurationMs = durationSec * 1000;
     const startTime = performance.now();
     timerProgress.style.strokeDashoffset = 0;
+    timeoutPrevSeconds = -1;
 
     const updateInterval = 10;
 
     timeoutInterval = setInterval(() => {
         const timeLeft = Math.max(0, timeoutDurationMs - (performance.now() - startTime));
 
-        const seconds = Math.floor(timeLeft / 1000);
-        const milliseconds = Math.floor((timeLeft % 1000) / 10);
-        timerText.textContent = `${seconds}.${milliseconds.toString().padStart(2, '0')}`;
+        const seconds = Math.ceil(timeLeft / 1000);
+        if (seconds !== timeoutPrevSeconds) {
+            timerText.textContent = `${seconds}`;
+            timeoutPrevSeconds = seconds;
+        }
 
         const offset = TIMER_CIRCLE_CIRCUMFERENCE * (1 - timeLeft / timeoutDurationMs);
         timerProgress.style.strokeDashoffset = offset;
 
         if (timeLeft <= 0) {
-            timerText.textContent = '0.00';
+            timerText.textContent = '0';
             clearInterval(timeoutInterval);
             timeoutInterval = null;
             SoundFX.play('timeoutEnd');
@@ -1263,6 +1299,7 @@ function confirmReturnToSetup() {
     document.getElementById('setBreakModal').classList.add('hidden');
     document.getElementById('deciderSwitchModal').classList.add('hidden');
     closeSubModal();
+    closeServeSwitchModal();
     resetToSetup();
 }
 
@@ -1898,6 +1935,16 @@ function confirmRotationSetup() {
     } else {
         // Start a new match - this will reset state and set up all UI elements
         beginMatch();
+    }
+}
+
+function returnToSetupFromRotation() {
+    if (matchIsLive()) {
+        // Mid-match (set 2+): abandoning here forfeits an in-progress match, so confirm first.
+        showReturnToSetupModal();
+    } else {
+        // Set-1 / pre-match: this is just a "back" button, no confirmation needed.
+        resetToSetup();
     }
 }
 
@@ -2547,11 +2594,13 @@ function updateDisplay() {
         });
     }
 
-    document.getElementById('team1Timeline').innerHTML = team1HTML;
-    document.getElementById('team2Timeline').innerHTML = team2HTML;
+    const team1TimelineEl = document.getElementById('team1Timeline');
+    const team2TimelineEl = document.getElementById('team2Timeline');
+    team1TimelineEl.innerHTML = team1HTML;
+    team2TimelineEl.innerHTML = team2HTML;
 
-    const container = document.querySelector('.timeline-container');
-    container.scrollLeft = container.scrollWidth;
+    team1TimelineEl.scrollLeft = team1TimelineEl.scrollWidth;
+    team2TimelineEl.scrollLeft = team2TimelineEl.scrollWidth;
     saveState();
 }
 
