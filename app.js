@@ -96,7 +96,7 @@ const STORAGE_SCHEMA = 3;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.12';
+const APP_VERSION = 'v4.20';
 
 // ── Feedback (Web3Forms) ──────────────────────────────────────────────────
 const WEB3FORMS_ACCESS_KEY = '24f54e6d-d6a5-4b1e-82bf-7952024d7886'; // TODO(owner): paste key from web3forms.com
@@ -728,6 +728,12 @@ function restoreSavedMatch() {
     let onScoreboard = false;
 
     if (state.matchOver) {
+        // endMatch() shows #matchResult and hides #scoreboard, but NOT #setup — which carries
+        // no `hidden` class in the markup and is therefore the default-visible screen. Every
+        // sibling branch below hides it explicitly; this one did not, so reloading on the
+        // result screen rendered the entire setup form ABOVE the result and read as a reset.
+        document.getElementById('setup').classList.add('hidden');
+        document.getElementById('rotationSetup').classList.add('hidden');
         endMatch({ fromRestore: true });
     } else if (!inProgress) {
         return false;
@@ -2192,6 +2198,23 @@ function checkSetWin() {
     }
 }
 
+// Resolves the identity-mapped --team1-color/--team2-color (+ rgb) custom props into
+// side-mapped colors (team1 = current left/side1, team2 = current right/side2). Shared by
+// renderSetChart() and renderFinalScore() so post-swap color mapping is derived once. v4.20.
+function sideColors() {
+    const cssStyle = getComputedStyle(document.documentElement);
+    const colorA = cssStyle.getPropertyValue('--team1-color').trim();
+    const colorB = cssStyle.getPropertyValue('--team2-color').trim();
+    const rgbA   = cssStyle.getPropertyValue('--team1-rgb').trim();
+    const rgbB   = cssStyle.getPropertyValue('--team2-rgb').trim();
+    return {
+        team1Color: state.team1OriginalId === 'A' ? colorA : colorB,
+        team2Color: state.team2OriginalId === 'A' ? colorA : colorB,
+        team1Rgb:   state.team1OriginalId === 'A' ? rgbA   : rgbB,
+        team2Rgb:   state.team2OriginalId === 'A' ? rgbA   : rgbB
+    };
+}
+
 function renderSetChart(set) {
     const pts = set.points;
     if (!pts || pts.length < 2) return '';
@@ -2202,28 +2225,22 @@ function renderSetChart(set) {
     const n = allPts.length - 1;
     const maxScore = Math.max(set.team1Score, set.team2Score, 1);
 
-    const cssStyle = getComputedStyle(document.documentElement);
-    const colorA = cssStyle.getPropertyValue('--team1-color').trim();
-    const colorB = cssStyle.getPropertyValue('--team2-color').trim();
-    const rgbA   = cssStyle.getPropertyValue('--team1-rgb').trim();
-    const rgbB   = cssStyle.getPropertyValue('--team2-rgb').trim();
-    const team1Color = state.team1OriginalId === 'A' ? colorA : colorB;
-    const team1Rgb   = state.team1OriginalId === 'A' ? rgbA   : rgbB;
-    const team2Color = state.team2OriginalId === 'A' ? colorA : colorB;
-    const team2Rgb   = state.team2OriginalId === 'A' ? rgbA   : rgbB;
+    const { team1Color, team2Color, team1Rgb, team2Rgb } = sideColors();
 
     const toX = i => (padX + (n > 0 ? (i / n) * (w - 2 * padX) : 0)).toFixed(1);
     const toY = s => ((dataH - padY) - (s / maxScore) * (dataH - 2 * padY)).toFixed(1);
 
-    // Per-segment lines — trailing team rendered at low opacity each interval
+    // Per-segment lines — trailing team rendered at low opacity each interval. `.sc-seg` +
+    // `--i` (rally index) drive the CSS draw-in stagger (v4.20 T4) — opacity only, so it
+    // composes with (never overrides) the stroke-opacity leader/trailer encoding above.
     let lines1 = '', lines2 = '';
     for (let i = 1; i <= n; i++) {
         const prev = allPts[i - 1], cur = allPts[i];
         const x1 = toX(i - 1), x2 = toX(i);
         const op1 = prev.team1Score < prev.team2Score ? '0.28' : '1';
         const op2 = prev.team2Score < prev.team1Score ? '0.28' : '1';
-        lines1 += `<line x1="${x1}" y1="${toY(prev.team1Score)}" x2="${x2}" y2="${toY(cur.team1Score)}" stroke="${team1Color}" stroke-width="2.5" stroke-opacity="${op1}" stroke-linecap="round"/>`;
-        lines2 += `<line x1="${x1}" y1="${toY(prev.team2Score)}" x2="${x2}" y2="${toY(cur.team2Score)}" stroke="${team2Color}" stroke-width="2.5" stroke-opacity="${op2}" stroke-linecap="round"/>`;
+        lines1 += `<line class="sc-seg" style="--i:${i}" x1="${x1}" y1="${toY(prev.team1Score)}" x2="${x2}" y2="${toY(cur.team1Score)}" stroke="${team1Color}" stroke-width="2.5" stroke-opacity="${op1}" stroke-linecap="round"/>`;
+        lines2 += `<line class="sc-seg" style="--i:${i}" x1="${x1}" y1="${toY(prev.team2Score)}" x2="${x2}" y2="${toY(cur.team2Score)}" stroke="${team2Color}" stroke-width="2.5" stroke-opacity="${op2}" stroke-linecap="round"/>`;
     }
 
     // Score markers — tick at each 5-point score milestone (labels show score, not rally count)
@@ -2241,15 +2258,44 @@ function renderSetChart(set) {
     const winLabel = winnerOriginalId === state.team1OriginalId ? state.team1Name : state.team2Name;
     const winColor = winnerOriginalId === state.team1OriginalId ? team1Color : team2Color;
 
+    // v4.20 T4: two annotations only, sharing longestRunInSet() with the Match Story "Longest
+    // Run" card so the chart and the card never disagree about what counts as a run. Y
+    // coordinates are clamped to stay inside the SVG's own coordinate space (not relying on
+    // `.set-chart { overflow: visible }`) since the ≤600px carousel below makes `.set-charts`
+    // a scroll container that clips overflow on both axes.
+    let annotations = '';
+    const run = longestRunInSet(pts);
+    if (run.len >= 3) { // same threshold buildMatchStoryCards() uses for the card
+        const vertexIdx = run.startIdx + 1; // allPts index of the run's first scored point
+        const runScore = run.team === 1 ? allPts[vertexIdx].team1Score : allPts[vertexIdx].team2Score;
+        const rx = toX(vertexIdx);
+        // A run that STARTS in the final stretch is the closing surge, so its marker lands on
+        // the final-score label — and both otherwise clamp into the same top band, so they
+        // overlap. Flip the marker below its vertex in that case rather than dropping it, so
+        // no information is lost and the chart still agrees with the "Longest Run" card.
+        const nearEnd = n > 0 && vertexIdx / n > 0.82;
+        const ry = nearEnd
+            ? Math.min(dataH - 2, Number(toY(runScore)) + 12)
+            : Math.max(padY + 8, Number(toY(runScore)) - 6);
+        annotations += `<text class="sc-run-marker" x="${rx}" y="${ry}">&#9656;</text>`;
+    }
+
+    const winnerIsTeam1 = winnerOriginalId === state.team1OriginalId;
+    const finalScore = winnerIsTeam1 ? set.team1Score : set.team2Score;
+    const finalX = toX(n);
+    const finalY = Math.max(padY + 8, Number(toY(finalScore)) - 8);
+    annotations += `<circle class="sc-final-marker" cx="${toX(n)}" cy="${toY(finalScore)}" r="4.5" fill="${winColor}"/>`;
+    annotations += `<text class="sc-final-label" x="${finalX - 8}" y="${finalY}" fill="${winColor}">${set.team1Score}&ndash;${set.team2Score}</text>`;
+
     return `
-        <div class="set-chart-wrap">
+        <div class="set-chart-wrap" style="--panel-i:${set.set - 1}">
             <div class="set-chart-header">
                 <span class="set-chart-label">Set ${set.set}</span>
                 <span class="set-chart-score">${set.team1Score} – ${set.team2Score}</span>
                 <span class="set-chart-winner" style="color:${winColor}">${escapeHtml(winLabel)}</span>
             </div>
             <svg viewBox="0 0 ${w} ${svgH}" class="set-chart" preserveAspectRatio="none">
-                ${lines1}${lines2}${ticks}
+                ${lines1}${lines2}${ticks}${annotations}
             </svg>
             <div class="set-chart-axis">
                 <span style="color:${team1Color}">${escapeHtml(state.team1Name)}</span>
@@ -2289,17 +2335,300 @@ function endMatch({ fromRestore = false } = {}) {
 
     document.getElementById('winner').textContent = `${winner} Wins!`;
 
-    const totalT1 = state.setHistory.reduce((a, s) => a + s.team1Score, 0);
-    const totalT2 = state.setHistory.reduce((a, s) => a + s.team2Score, 0);
+    renderFinalScore(fromRestore);
+}
 
-    let scoreHTML = `<div class="final-summary">Final: ${state.team1Sets} – ${state.team2Sets}</div>`;
-    scoreHTML += `<div class="total-points">${escapeHtml(state.team1Name)} ${totalT1} pts &nbsp;·&nbsp; ${escapeHtml(state.team2Name)} ${totalT2} pts</div>`;
-    scoreHTML += '<div class="set-results-row">';
-    state.setHistory.forEach(set => {
-        const winnerClass = set.winner === 1 ? 'team1-win' : 'team2-win';
-        scoreHTML += `<span class="set-result ${winnerClass}">Set ${set.set}: ${set.team1Score}-${set.team2Score}</span>`;
+// v4.20 T1: semantic box-score table (replaces the .set-results-row pill row).
+// Dots reuse sideColors() — the same identity->side resolution renderSetChart uses.
+function buildBoxScoreTable(team1Color, team2Color) {
+    const sets = state.setHistory;
+    const t1Wins = state.team1Sets > state.team2Sets;
+
+    const headerCells = sets.map(s => `<th>S${s.set}</th>`).join('');
+    const team1Cells = sets.map(s =>
+        `<td class="${s.winner === 1 ? 'box-score-win' : 'box-score-lose'}">${s.team1Score}</td>`).join('');
+    const team2Cells = sets.map(s =>
+        `<td class="${s.winner === 2 ? 'box-score-win' : 'box-score-lose'}">${s.team2Score}</td>`).join('');
+
+    return `
+        <div class="box-score-wrap">
+            <table class="box-score">
+                <thead>
+                    <tr>
+                        <th class="box-score-name"></th>
+                        ${headerCells}
+                        <th class="box-score-sets-col">Sets</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="box-score-name"><span class="box-score-dot" style="background:${team1Color}"></span>${escapeHtml(state.team1Name)}</td>
+                        ${team1Cells}
+                        <td class="box-score-sets-col ${t1Wins ? 'box-score-win' : 'box-score-lose'}">${state.team1Sets}</td>
+                    </tr>
+                    <tr>
+                        <td class="box-score-name"><span class="box-score-dot" style="background:${team2Color}"></span>${escapeHtml(state.team2Name)}</td>
+                        ${team2Cells}
+                        <td class="box-score-sets-col ${!t1Wins ? 'box-score-win' : 'box-score-lose'}">${state.team2Sets}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// v4.20 T2: rAF count-up for the full-time hero digits, 0 -> final over ~600ms.
+// Skipped entirely (caller renders final values instantly) on restore or reduced-motion.
+function runSetsCountUp(el1, el2, final1, final2) {
+    const duration = 600;
+    const start = performance.now();
+    function step(now) {
+        const t = Math.min(1, (now - start) / duration);
+        el1.textContent = Math.round(final1 * t);
+        el2.textContent = Math.round(final2 * t);
+        if (t < 1) {
+            requestAnimationFrame(step);
+        }
+    }
+    requestAnimationFrame(step);
+}
+
+// v4.20 T3: pure stat-derivation functions for the "Match Story" card strip. Each takes only
+// the `sets` array (state.setHistory) — no state access, no DOM reads — so re-running the same
+// derivation on reload (endMatch({fromRestore:true})) reproduces identical cards. Every one
+// tolerates legacy saves via `(s.points || [])`: setHistory entries predate per-rally point
+// logging in some old saves and simply yield a zero/degenerate result, never a crash.
+
+// v4.20 T4: single-set run scanner. Extracted out of longestRun() so the chart marker (which
+// needs a start index into ONE set's points) and the Match Story "Longest Run" card (which
+// needs the best run across the WHOLE match) share one source of truth — two independent
+// scanners would risk disagreeing about what counts as the longest run on the same screen.
+function longestRunInSet(points) {
+    let best = { len: 0, team: 0, startIdx: -1 };
+    let len = 0, team = 0, startIdx = -1;
+    (points || []).forEach((p, i) => {
+        if (p.team === team) {
+            len += 1;
+        } else {
+            len = 1;
+            team = p.team;
+            startIdx = i;
+        }
+        if (len > best.len) best = { len, team, startIdx };
     });
-    scoreHTML += '</div>';
+    return best; // best.len === 0 → no data
+}
+
+function longestRun(sets) {
+    let best = { len: 0, team: 0, set: 0 };
+    sets.forEach(s => {
+        const r = longestRunInSet(s.points || []);
+        // Strict `>` (not `>=`) preserves the original point-by-point scan's tie behaviour:
+        // when two sets share the same max run length, the earlier set in `sets` order wins.
+        if (r.len > best.len) best = { len: r.len, team: r.team, set: s.set };
+    });
+    return best; // best.len === 0 → no data
+}
+
+function biggestComeback(sets) {
+    let best = { deficit: 0, set: 0, winner: 0 };
+    sets.forEach(s => {
+        let maxDeficit = 0;
+        (s.points || []).forEach(p => {
+            const winnerScore = s.winner === 1 ? p.team1Score : p.team2Score;
+            const loserScore  = s.winner === 1 ? p.team2Score : p.team1Score;
+            maxDeficit = Math.max(maxDeficit, loserScore - winnerScore);
+        });
+        if (maxDeficit > best.deficit) best = { deficit: maxDeficit, set: s.set, winner: s.winner };
+    });
+    return best;
+}
+
+// A lead change is when the team that is AHEAD changes hands. A tie is NOT a lead change,
+// and it does not clear the incumbent leader — so lead → tie → same team ahead counts as
+// ZERO (the lead never changed hands), while lead → tie → other team ahead counts as ONE.
+// This is the only stat where a naive "count sign flips" reading double-counts every deuce.
+function leadChanges(sets) {
+    let total = 0, worst = { count: 0, set: 0 };
+    sets.forEach(s => {
+        let count = 0, leader = 0; // 0 = nobody has led yet
+        (s.points || []).forEach(p => {
+            const sign = Math.sign(p.team1Score - p.team2Score); // 1 | -1 | 0
+            if (sign === 0) return;                  // tie: retain incumbent leader
+            if (leader !== 0 && sign !== leader) count++;
+            leader = sign;
+        });
+        total += count;
+        if (count > worst.count) worst = { count, set: s.set };
+    });
+    return { total, worst }; // total === 0 → hide the card; worst.set names the wildest set
+}
+
+// No reference impl given in the plan doc (§3.3) — written in the same style as the three
+// above. Spec: max abs(team1Score - team2Score) reached at any rally across the whole match,
+// plus which side held it and in which set.
+function largestLead(sets) {
+    let best = { lead: 0, team: 0, set: 0 };
+    sets.forEach(s => {
+        (s.points || []).forEach(p => {
+            const lead = Math.abs(p.team1Score - p.team2Score);
+            if (lead > best.lead) best = { lead, team: p.team1Score > p.team2Score ? 1 : 2, set: s.set };
+        });
+    });
+    return best; // best.lead === 0 → no data
+}
+
+function formatMatchDuration(sec) {
+    if (sec == null) return null;
+    const h = Math.floor(sec / 3600);
+    // floor, not round: rounding carries 3590s to "60m" and 7175s to "1h 60m".
+    const m = Math.floor((sec % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// Side name (1/2) for card details — indexes the CURRENT team1Name/team2Name, which is
+// correct post-swap because setHistory[].points is remapped by swapTeams() (see CLAUDE.md,
+// "Side-swap vs. team-swap"). team === 0 (no data) falls back to team1Name; the caller never
+// renders that case since the owning card is hidden when its stat is degenerate.
+function sideName(team) {
+    return team === 2 ? state.team2Name : state.team1Name;
+}
+
+// v4.20 T3: assembles the Match Story card strip — at most 5 cards, in the table-priority
+// order from plan doc §3.3 (Duration, Total Rallies, Longest Run, Lead Changes, Biggest
+// Comeback, Largest Lead, Points). Degenerate cards are omitted outright, never rendered as
+// "0" — an empty-ish strip with 2 strong cards beats 7 weak ones.
+function buildMatchStoryCards() {
+    const sets = state.setHistory;
+    const candidates = [];
+
+    const durationLabel = formatMatchDuration(state.matchDurationSec);
+    if (durationLabel != null) {
+        candidates.push({ eyebrow: 'Duration', value: escapeHtml(durationLabel), detail: '' });
+    }
+
+    const totalRallies = sets.reduce((a, s) => a + (s.points || []).length, 0);
+    candidates.push({
+        eyebrow: 'Total Rallies',
+        value: String(totalRallies),
+        detail: `${sets.length} set${sets.length === 1 ? '' : 's'} played`
+    });
+
+    const run = longestRun(sets);
+    if (run.len >= 3) {
+        candidates.push({
+            eyebrow: 'Longest Run',
+            value: `${run.len}-0 run`,
+            detail: `${escapeHtml(sideName(run.team))} &middot; Set ${run.set}`
+        });
+    }
+
+    const changes = leadChanges(sets);
+    if (changes.total > 0) {
+        candidates.push({
+            eyebrow: 'Lead Changes',
+            value: String(changes.total),
+            detail: `Wildest in Set ${changes.worst.set}`
+        });
+    }
+
+    const comeback = biggestComeback(sets);
+    if (comeback.deficit >= 3) {
+        candidates.push({
+            eyebrow: 'Biggest Comeback',
+            value: `from ${comeback.deficit} down`,
+            detail: `${escapeHtml(sideName(comeback.winner))} &middot; Set ${comeback.set}`
+        });
+    }
+
+    const lead = largestLead(sets);
+    if (lead.lead >= 4) {
+        candidates.push({
+            eyebrow: 'Largest Lead',
+            value: `${lead.lead}-point lead`,
+            detail: `${escapeHtml(sideName(lead.team))} &middot; Set ${lead.set}`
+        });
+    }
+
+    const totalT1 = sets.reduce((a, s) => a + s.team1Score, 0);
+    const totalT2 = sets.reduce((a, s) => a + s.team2Score, 0);
+    candidates.push({
+        eyebrow: 'Points',
+        value: String(totalT1 + totalT2),
+        detail: `${escapeHtml(state.team1Name)} ${totalT1} &middot; ${escapeHtml(state.team2Name)} ${totalT2}`
+    });
+
+    // Cap the strip so a rich match doesn't render a wall of cards. A plain slice(0, 5) in
+    // table order would drop Points from a match that triggered every situational card —
+    // contradicting its own "never hide" rule, since its value is always meaningful. So the
+    // two never-hide cards get guaranteed slots, and the rest are selected story-first: a
+    // run / comeback / lead-change is the whole point of a "Match Story" strip, whereas
+    // Duration is context and is the first thing worth losing.
+    const MAX_CARDS = 5;
+    const SELECTION_PRIORITY = [
+        'Total Rallies', 'Points',                                   // never-hide: guaranteed
+        'Longest Run', 'Biggest Comeback', 'Lead Changes',            // the story
+        'Largest Lead', 'Duration'                                   // context
+    ];
+    const kept = new Set(
+        candidates
+            .slice()
+            .sort((a, b) => SELECTION_PRIORITY.indexOf(a.eyebrow) - SELECTION_PRIORITY.indexOf(b.eyebrow))
+            .slice(0, MAX_CARDS)
+            .map(c => c.eyebrow)
+    );
+    // filter preserves the §3.3 table order the candidates were pushed in, so selection
+    // priority changes only WHICH cards survive, never the left-to-right reading order.
+    return candidates.filter(c => kept.has(c.eyebrow));
+}
+
+// Renders buildMatchStoryCards() into the `.story-strip` wrap-row of `.story-card`s. The
+// empty-cards guard below is defensive only and is currently unreachable: Total Rallies and
+// Points are pushed unconditionally, so the card list is never shorter than 2. Keep the guard
+// so the function stays safe if either of those ever gains a hide-rule.
+function renderMatchStoryStrip() {
+    const cards = buildMatchStoryCards();
+    if (cards.length === 0) return '';
+    const cardsHTML = cards.map(c => `
+        <div class="story-card">
+            <div class="story-card-eyebrow">${c.eyebrow}</div>
+            <div class="story-card-value">${c.value}</div>
+            ${c.detail ? `<div class="story-card-detail">${c.detail}</div>` : ''}
+        </div>
+    `).join('');
+    return `<div class="story-strip">${cardsHTML}</div>`;
+}
+
+// v4.20 T0: extracted from endMatch() — builds the #finalScore innerHTML. Must receive
+// fromRestore explicitly (not read from a global) since count-up animation (T2) is gated on it.
+function renderFinalScore(fromRestore) {
+    const { team1Color, team2Color } = sideColors();
+    const t1Wins = state.team1Sets > state.team2Sets;
+    // Count-up only on a live match end; restore and reduced-motion render final values instantly.
+    const skipCountUp = fromRestore || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let scoreHTML = `
+        <div class="ft-scoreline">
+            <div class="ft-team">
+                <span class="ft-dot" style="background:${team1Color}"></span>
+                <span class="ft-name">${escapeHtml(state.team1Name)}</span>
+            </div>
+            <div class="ft-sets">
+                <span id="ftDigit1" class="ft-digit ${t1Wins ? 'ft-digit-win' : ''}">${skipCountUp ? state.team1Sets : 0}</span>
+                <span class="ft-sep">&mdash;</span>
+                <span id="ftDigit2" class="ft-digit ${!t1Wins ? 'ft-digit-win' : ''}">${skipCountUp ? state.team2Sets : 0}</span>
+            </div>
+            <div class="ft-team">
+                <span class="ft-dot" style="background:${team2Color}"></span>
+                <span class="ft-name">${escapeHtml(state.team2Name)}</span>
+            </div>
+        </div>`;
+
+    // v4.20 T3: Match Story card strip (replaces the Batch A placeholder). The old
+    // total-points line now lives inside the "Points" card — see buildMatchStoryCards().
+    scoreHTML += renderMatchStoryStrip();
+
+    scoreHTML += buildBoxScoreTable(team1Color, team2Color);
 
     scoreHTML += '<div class="set-charts">';
     state.setHistory.forEach(set => {
@@ -2308,6 +2637,15 @@ function endMatch({ fromRestore = false } = {}) {
     scoreHTML += '</div>';
 
     document.getElementById('finalScore').innerHTML = scoreHTML;
+
+    if (!skipCountUp) {
+        runSetsCountUp(
+            document.getElementById('ftDigit1'),
+            document.getElementById('ftDigit2'),
+            state.team1Sets,
+            state.team2Sets
+        );
+    }
 }
 
 function buildResultSummary() {

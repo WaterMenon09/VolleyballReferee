@@ -107,6 +107,17 @@ When a set ends, `checkSetWin()` calls `showSetBreakModal(nextSetNumber)` which 
 
 The full `state` object is serialized to localStorage under the key `vb-match-state` after every `updateDisplay()` call. On `init()`, `restoreSavedMatch()` reads it and routes the user back to the correct screen (scoreboard / rotation setup / match result). Stored under a `_schema` version field — `STORAGE_SCHEMA` is currently **3**. Bump it when the state shape changes in a way that breaks restore. Unlike earlier versions, schema changes are handled by `migrate()` rather than by silently dropping state: the 2 → 3 migration injects hardcoded v2-era rule constants into `state.rules` and seeds `state.techTimeoutsFired = []`, preserving in-flight matches. Only add a `return null` (discard) path for truly irrecoverable breaks. `resetMatchState()` clears the stored state so a "Return to Setup" reliably starts fresh. Timer intervals (timeout countdown, set break) live in module-level vars, not in state — they are NOT restored, so a timeout interrupted by reload simply ends.
 
+### Result screen stats layer (v4.20)
+
+The result screen is no longer a static readout — it renders a **computed stats layer** derived entirely from `state.setHistory` (no new tracking, no schema change).
+
+- `renderFinalScore(fromRestore)` builds the whole `#finalScore` innerHTML. It was extracted out of `endMatch()` in v4.20; `endMatch()` passes `fromRestore` in explicitly. **Never read `fromRestore` from a global** — the count-up animation is gated on it (animate on live finish, render final values instantly on reload-restore).
+- **Pure stat functions**, all taking the `setHistory` array and returning plain values with no `state` or DOM access: `longestRun` / `longestRunInSet`, `biggestComeback`, `leadChanges`, `largestLead`. `longestRun` delegates to `longestRunInSet` so the chart's run marker and the "Longest Run" card share one source of truth and can never disagree on screen. Every one must tolerate legacy saves via `(s.points || [])`.
+- `leadChanges` counts changes of *which team is ahead*. A tie is not a change and does not clear the incumbent leader — a naive "count sign flips" reading double-counts every deuce.
+- `buildMatchStoryCards()` caps the strip at 5. Selection priority is **not** display order: the two never-hide cards (Total Rallies, Points) take guaranteed slots, remaining slots go story-first. Display order stays left-to-right as pushed.
+- **Colour rule:** use `sideColors()`, which resolves the identity-mapped `--team1-color`/`--team2-color` (keyed to `originalId`) into the current side order. Never use those custom properties directly for anything ordered by side — that mismatch was a real bug in the pre-v4.20 set pills.
+- **Restore path is the regression trap.** `endMatch({fromRestore:true})` runs the same render on reload, so every element must derive from persisted state only — no transient variables, no `Date.now()` in the render path. After changing anything here, verify a reload on the result screen re-renders identically and the count-up does not replay.
+
 ## Code Review Checklist
 
 Every code review for this repo **must** verify UI across all of these viewports:

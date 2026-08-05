@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.20 — 2026-08-05
+
+Match result screen rebuilt as a post-match broadcast graphic. Every new number is computed from data the app already stored — no new tracking, no schema change.
+
+### Added
+- **Full-time scoreline** — the sets score is now the hero of the screen, with each team's name and colour dot, and the winner's digit in gold. The digits count up when a match finishes live, and render instantly on a reload so you never see a wrong number
+- **Box score table** — set scores are a proper table (teams as rows, sets as columns) instead of a loose row of pills, so you can scan one team across the whole match. Set winners are highlighted per column
+- **"Match Story" strip** — computed insight cards: longest scoring run, biggest comeback, lead changes, largest lead, match duration, total rallies, and total points. Cards that would read as noise hide themselves, so a straight-sets win shows fewer, stronger cards rather than a wall of zeroes
+- **Chart annotations** — each set's momentum chart now marks where the longest run began and enlarges the final point, so the shape of the set is readable without decoding it
+- Set charts become a swipeable carousel on phones instead of shrinking to fit
+
+### Fixed
+- **Reloading on the result screen rendered the entire match-setup form above the result**, which read as though the match had been thrown away. The result-restore path was the only one that never hid the setup screen. Long-standing bug, found while verifying this release
+- Set-score pills coloured themselves from the persisted team-colour slots rather than the current side, so they showed the wrong team's colour after a mid-match swap. The pills are gone and the replacement resolves colour through the same side-mapping the momentum charts already used
+- Losing set scores in the box score rendered at full strength instead of dimmed, so the gold winner didn't stand out as intended
+- A match ending within 30 seconds of an hour boundary showed a nonsense duration ("60m", "1h 60m")
+- The version credit is pinned to the bottom of the screen, so on a short landscape phone it floated over the result screen instead of sitting below it. It is now hidden at that size, alongside the other chrome that block already sheds
+- `prefers-reduced-motion` zeroed animation *durations* but not *delays*, so staggered entrances still revealed progressively over ~0.7s for users who asked for no motion. Now zeroed too, which also fixes the pre-existing result-screen staggers
+
+### Internal
+- The result-screen HTML builder was extracted out of `endMatch()` into `renderFinalScore(fromRestore)`; the stats layer is a set of pure functions (`longestRun`/`longestRunInSet`, `biggestComeback`, `leadChanges`, `largestLead`) that take the set history and return plain values
+- `sideColors()` centralises the identity-to-side colour resolution that was previously inline in the chart renderer
+- CI now gates deployment on `node --check` for `app.js` and `sw.js` — previously every push to `main` shipped to production unverified
+- Service worker v4.2.0 (cache invalidation); `APP_SHELL` unchanged, `STORAGE_SCHEMA` stays 3
+
+### Not included
+- Share-as-image ("Share Card") is deliberately held back. Its whole value is the share sheet firing on a real device, and that cannot be verified in an automated browser — it ships separately after on-device testing. Sharing result text is unchanged
+
 ## v4.12 — 2026-08-05
 
 Polish release addressing eight pieces of end-user feedback on the v4.10 build. No scoring-logic changes.

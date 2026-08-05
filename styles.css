@@ -1504,11 +1504,6 @@ textarea:focus-visible,
     color: var(--ink-85);
 }
 
-.final-score .set-result {
-    display: inline-block;
-    margin: 5px;
-}
-
 .result-actions {
     display: flex;
     gap: var(--sp-3);
@@ -1812,6 +1807,16 @@ textarea:focus-visible,
     /* hide timeline and return-to-setup in landscape — scoreboard must fit 1 viewport */
     .point-timeline,
     #scoreboard .controls {
+        display: none;
+    }
+
+    /* .credits is position:fixed, so on a 390px-tall viewport it floats over whatever content
+       occupies the bottom-right band rather than sitting below it — measured intersecting the
+       result-screen hero scoreline once long team names wrap the winner heading onto two
+       lines. It is decorative version text, so shed it here like the other chrome above.
+       Making it static instead would add height to the scoreboard, which this whole block
+       exists to keep inside one viewport. */
+    .credits {
         display: none;
     }
 
@@ -2177,40 +2182,210 @@ textarea:focus-visible,
 
 /* ── Set Lead Charts ─────────────────────────────────────────────────────── */
 
-.final-summary {
-    font: 600 1.6rem/1.1 var(--font-display);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--ink-85);
+/* v4.20 T2: full-time hero scoreline (replaces .final-summary + .total-points) */
+.ft-scoreline {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--sp-4);
     margin-top: var(--sp-5);
 }
 
-.total-points {
-    color: var(--ink-65);
-    font-size: 0.95rem;
-    margin-top: var(--sp-2);
+.ft-team {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    min-width: 0;
 }
 
-.set-results-row {
+.ft-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.ft-name {
+    font: 600 clamp(1.1rem, 4vw, 1.6rem)/1.15 var(--font-display);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--ink-85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ft-sets {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+}
+
+.ft-digit {
+    font: 800 clamp(3rem, 12vw, 5rem)/1 var(--font-display);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-65);
+}
+
+.ft-digit-win {
+    color: var(--gold);
+}
+
+.ft-sep {
+    font: 800 clamp(2rem, 8vw, 3rem)/1 var(--font-display);
+    color: var(--ink-45);
+}
+
+/* v4.20 T3: "Match Story" insight strip — a wrap-row of small stat cards built from the pure
+   stat functions in app.js. flex-grow:0 on the card keeps 2 surviving cards from stretching
+   awkwardly across the full row when most cards degenerate away (hide-when thresholds). */
+.story-strip {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-2);
-    justify-content: center;
-    margin-top: var(--sp-4);
+    gap: var(--sp-3);
+    margin-top: var(--sp-5);
 }
 
-.set-result {
-    font: 600 0.9rem/1 var(--font-body);
-    font-variant-numeric: tabular-nums;
-    padding: var(--sp-2) var(--sp-3);
+.story-card {
+    flex: 0 1 152px;
+    min-width: 152px;
     background: var(--surface-2);
-    border: 1px solid var(--stroke-2);
-    border-radius: var(--r-pill);
-    color: var(--ink-85);
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--r-sm);
+    padding: var(--sp-3) var(--sp-4);
 }
 
-.set-result.team1-win { box-shadow: inset 0 -2px 0 var(--team1-color); }
-.set-result.team2-win { box-shadow: inset 0 -2px 0 var(--team2-color); }
+.story-card-eyebrow {
+    font: 700 0.65rem/1 var(--font-body);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-45);
+    margin-bottom: var(--sp-1);
+}
+
+.story-card-value {
+    font: 800 1.35rem/1.15 var(--font-display);
+    letter-spacing: 0.02em;
+    color: var(--ink-85);
+    font-variant-numeric: tabular-nums;
+}
+
+.story-card-detail {
+    margin-top: var(--sp-1);
+    font: 600 0.72rem/1.3 var(--font-body);
+    color: var(--ink-65);
+    /* Wraps rather than truncates — team names can be long, and this is a small fixed-width
+       card, so an ellipsis would silently drop information. Two lines here reads fine. */
+    overflow-wrap: break-word;
+}
+
+@media (max-width: 480px) {
+    .story-card { flex-basis: calc(50% - var(--sp-3) / 2); min-width: 0; }
+}
+
+/* v4.20 T1: semantic box score (replaces .set-results-row pills) */
+.box-score-wrap {
+    margin-top: var(--sp-5);
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-1), var(--glass-edge);
+}
+
+.box-score {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.box-score thead th {
+    font: 700 0.68rem/1 var(--font-body);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-65);
+    padding: var(--sp-3);
+    text-align: center;
+}
+
+.box-score thead th.box-score-sets-col,
+.box-score tbody td.box-score-sets-col {
+    border-left: 1px solid var(--stroke-2);
+}
+
+.box-score tbody td {
+    height: 44px;
+    box-sizing: border-box;
+    padding: var(--sp-2) var(--sp-3);
+    text-align: center;
+    vertical-align: middle;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-65);
+}
+
+.box-score tbody td.box-score-win {
+    color: var(--gold);
+    font-weight: 800;
+}
+
+/* The losing cell in each column, dimmed so the gold winner reads as the answer at a glance.
+   The class was being emitted with no rule at all, so losing cells rendered at full strength. */
+.box-score tbody td.box-score-lose {
+    color: var(--ink-65);
+}
+
+.box-score tbody td.box-score-sets-col {
+    font-weight: 800;
+}
+
+.box-score th.box-score-name,
+.box-score td.box-score-name {
+    text-align: left;
+}
+
+.box-score td.box-score-name {
+    font: 600 0.95rem/1.2 var(--font-body);
+    color: var(--ink-85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.box-score-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: var(--sp-2);
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    .box-score-wrap {
+        overflow-x: auto;
+        scrollbar-width: none;
+        mask-image: linear-gradient(90deg, black 92%, transparent);
+        -webkit-mask-image: linear-gradient(90deg, black 92%, transparent);
+    }
+    .box-score-wrap::-webkit-scrollbar { display: none; }
+    .box-score { min-width: 100%; }
+    /* `max-width: 9ch` on the CELL gave the NAME only ~3 characters: the dot (10px) + its
+       margin (8px) + two lots of --sp-3 padding (24px) ate 42px of the 9ch budget, so
+       "Thunderbolts VC" and "Thunder Hawks" both rendered as "Thu…". Shrink this cell's
+       side padding to --sp-1 and size the cell to 9ch PLUS the overhead, so 9ch is what the
+       text actually gets. Overhead = dot 10px + margin 8px + 2 × --sp-1 (8px) = 26px.
+       In the 5-set + long-name worst case the panel may now scroll horizontally — that is
+       explicitly allowed (panel, never the page) and the edge-fade mask above signals it. */
+    .box-score td.box-score-name {
+        padding-left: var(--sp-1);
+        padding-right: var(--sp-1);
+        max-width: calc(9ch + 26px);
+    }
+    .box-score th:not(.box-score-name),
+    .box-score td:not(.box-score-name) { min-width: 36px; }
+}
 
 .set-charts {
     display: grid;
@@ -2281,6 +2456,69 @@ textarea:focus-visible,
     color: var(--ink-65);
     margin-top: 4px;
     padding: 0 4px;
+}
+
+/* v4.20 T4: chart annotations — a gold longest-run marker and an enlarged final-point marker
+   carrying the set score. Colour-static pieces live here as classes; per-side/dynamic colour
+   (the final marker's fill) stays inline in the generated SVG, matching how the worm segments
+   themselves already mix inline computed colour with static structural CSS. */
+.sc-run-marker {
+    fill: var(--gold);
+    font-size: 11px;
+    text-anchor: middle;
+}
+
+.sc-final-marker {
+    stroke: var(--surface-1);
+    stroke-width: 1.5px;
+}
+
+.sc-final-label {
+    font: 700 9px var(--font-body);
+    font-variant-numeric: tabular-nums;
+    text-anchor: end;
+}
+
+/* v4.20 T4: worm draw-in. Per-segment opacity fade (not stroke-dashoffset — the worm is many
+   short per-segment <line>s, so a dash-offset would need to travel per segment anyway, and
+   opacity is simpler to get right). `opacity` here is a separate channel from the segment's
+   own `stroke-opacity` (which encodes which side was trailing at that point) — they compose.
+   Staggers left-to-right within a panel via `--i` (rally index) and panel-to-panel via
+   `--panel-i` (Set N - 1, set on `.set-chart-wrap` from persisted `set.set` — no transient
+   counters). Reduced motion: the global block at the end of this file forces
+   `animation-duration`/`animation-iteration-count` to ~0 on every element via a `*` selector,
+   so `.sc-seg` resolves to its `to` state almost immediately. That block also zeroes
+   `animation-delay`, so under reduced motion the whole stagger collapses and every segment
+   appears at once — a literal kill, not just an imperceptible draw. `animation-fill-mode:
+   forwards` is required regardless, or the near-zero duration would snap segments back to
+   `opacity: 0`. */
+.sc-seg {
+    opacity: 0;
+    animation: scSegIn var(--dur-med) var(--ease-out) forwards;
+    animation-delay: calc(var(--panel-i, 0) * 0.1s + var(--i, 0) * 0.012s);
+}
+
+@keyframes scSegIn {
+    to { opacity: 1; }
+}
+
+/* v4.20 T4: mobile carousel. Desktop/tablet keep the existing grid; ≤600px the panels become
+   a horizontal scroll-snap carousel instead of stacking, so a 5-set match doesn't turn into a
+   long vertical scroll of charts. Dot indicators skipped (fiddly for no real gain here). */
+@media (max-width: 600px) {
+    .set-charts {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        padding-bottom: var(--sp-2);
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .set-chart-wrap {
+        flex: 0 0 auto;
+        min-width: 86%;
+        scroll-snap-align: center;
+    }
 }
 
 
@@ -2471,24 +2709,29 @@ textarea:focus-visible,
     animation-delay: 0.08s;
 }
 
-.match-result:not(.hidden) .final-summary {
+.match-result:not(.hidden) .ft-scoreline {
     animation: fadeUp 0.5s var(--ease-out) backwards;
     animation-delay: 0.16s;
 }
 
-.match-result:not(.hidden) .set-results-row {
+.match-result:not(.hidden) .story-strip {
     animation: fadeUp 0.5s var(--ease-out) backwards;
     animation-delay: 0.24s;
 }
 
-.match-result:not(.hidden) .set-chart-wrap {
+.match-result:not(.hidden) .box-score-wrap {
     animation: fadeUp 0.5s var(--ease-out) backwards;
     animation-delay: 0.32s;
 }
 
+.match-result:not(.hidden) .set-chart-wrap {
+    animation: fadeUp 0.5s var(--ease-out) backwards;
+    animation-delay: 0.40s;
+}
+
 .match-result:not(.hidden) .result-actions {
     animation: fadeUp 0.5s var(--ease-out) backwards;
-    animation-delay: 0.24s;
+    animation-delay: 0.32s;
 }
 
 /* ── App bar action buttons ───────────────────────────────────────────────── */
@@ -2884,6 +3127,12 @@ textarea:focus-visible,
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
+        /* Zeroing duration alone left every staggered entrance still revealing over its
+           delay window — up to ~0.7s of progressive motion for a user who asked for none.
+           v4.20's per-segment chart draw-in made that obvious; the gap applied to the
+           pre-existing result-screen staggers too. */
+        animation-delay: 0s !important;
+        transition-delay: 0s !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }

@@ -16,7 +16,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate the deploy. Without this, a syntax error in app.js ships a blank app to
+  # production, since every push to main deploys unconditionally.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax-check app.js
+        run: node --check app.js
+
+      - name: Syntax-check sw.js
+        run: node --check sw.js
+
   deploy:
+    needs: check
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
