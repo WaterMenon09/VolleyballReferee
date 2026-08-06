@@ -117,7 +117,50 @@ const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.21';
+const APP_VERSION = 'v4.22';
+
+// ── Changelog (homepage "What's New" modal) ────────────────────────────────
+// User-facing rewrite of CHANGELOG.md, not a copy of it — the file is developer-toned (internal
+// notes, code names) and this is read by a referee. Deliberately an in-app array rather than
+// fetch('./CHANGELOG.md'): fetching would need the raw file added to sw.js's APP_SHELL to work
+// offline, for text nobody but a developer would want to read anyway.
+const CHANGELOG_ENTRIES = [
+    {
+        version: 'v4.22',
+        date: 'Aug 7, 2026',
+        changes: [
+            'Added this "What’s new" panel, so you can see what has changed without leaving the app. It lives on the home screen only — the app bar stays out of the way once a match is underway.',
+            'Sharing a link to the app now shows a proper title, description, and icon instead of bare text.'
+        ]
+    },
+    {
+        version: 'v4.21',
+        date: 'Aug 6, 2026',
+        changes: [
+            'Substitutions now follow the official rulebook: a starter and their substitute are locked to each other for the rest of the set, so a player can no longer be walked around the court by subbing out and back in somewhere else.',
+            'New "Substitutions per team per set" match rule in Settings. Leave it blank for unlimited (the default), or set a number — 6 is standard for indoor volleyball. The substitution screen shows how many you have used.',
+            'The result screen now shows how long each set took.',
+            'Fixed a couple of substitution edge cases involving the libero that could lock the wrong player out of a set.'
+        ]
+    },
+    {
+        version: 'v4.20',
+        date: 'Aug 5, 2026',
+        changes: [
+            'Redesigned the match result screen: a big scoreline, a set-by-set box score, and highlight cards for longest run, biggest comeback, lead changes, and more.',
+            'Set charts now mark exactly where the longest scoring run happened, and swipe like a carousel on phones instead of shrinking to fit.'
+        ]
+    },
+    {
+        version: 'v4.12',
+        date: 'Aug 5, 2026',
+        changes: [
+            'Added a "Match Settings" button on the setup screen and a "Return to Setup" button during rotation setup.',
+            'Switching the serving team mid-set now asks for confirmation, to prevent accidental taps.',
+            'Smoothed out the timeout countdown so the numbers no longer jitter.'
+        ]
+    }
+];
 
 // ── Feedback (Web3Forms) ──────────────────────────────────────────────────
 const WEB3FORMS_ACCESS_KEY = '24f54e6d-d6a5-4b1e-82bf-7952024d7886'; // TODO(owner): paste key from web3forms.com
@@ -170,6 +213,16 @@ function screenUrl(name) {
     return location.origin + (base.endsWith('/') ? base : base + '/') + name;
 }
 
+// The changelog button lives in the app bar but only makes sense on the homepage — mid-match
+// it would just be one more thing competing for a referee's attention. trackScreen() already
+// fires at every screen's entry point (see below), so it is the single hook that keeps this
+// correct on first load, after "Play Again", after "Return to Setup", and after a reload that
+// restores straight into rotation setup / the scoreboard / the result screen.
+function updateAppBarForScreen(name) {
+    const btn = document.getElementById('changelogBtn');
+    if (btn) btn.style.display = name === 'setup' ? '' : 'none';
+}
+
 function trackScreen(name) {
     // Dedupe. Several flows hide and re-show the SAME screen — showSetBreakModal() /
     // closeSetBreakModal() do it to the scoreboard every set break — and each of those would
@@ -177,6 +230,7 @@ function trackScreen(name) {
     // meaningless slices.
     if (name === _currentScreen) return;
     _currentScreen = name;
+    updateAppBarForScreen(name);
 
     const page_title = SCREEN_TITLES[name] || name;
     const page_location = screenUrl(name);
@@ -938,6 +992,13 @@ function init() {
     });
     updateHistoryButton();
 
+    // Changelog modal
+    document.getElementById('changelogBtn').addEventListener('click', openChangelogModal);
+    document.getElementById('closeChangelog').addEventListener('click', closeChangelogModal);
+    document.getElementById('changelogModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('changelogModal')) closeChangelogModal();
+    });
+
     // Feedback modal
     document.getElementById('feedbackBtn').addEventListener('click', openFeedbackModal);
     document.getElementById('cancelFeedback').addEventListener('click', closeFeedbackModal);
@@ -1687,6 +1748,31 @@ function updateHistoryButton() {
     const btn = document.getElementById('historyBtn');
     if (!btn) return;
     btn.style.display = loadMatchHistory().length > 0 ? '' : 'none';
+}
+
+// ── Changelog modal ──────────────────────────────────────────────────────
+function renderChangelogModal() {
+    const listEl = document.getElementById('changelogList');
+    listEl.innerHTML = CHANGELOG_ENTRIES.map(entry => `
+        <div class="changelog-entry">
+            <div class="changelog-entry-header">
+                <span class="changelog-version">${escapeHtml(entry.version)}</span>
+                <span class="changelog-date">${escapeHtml(entry.date)}</span>
+            </div>
+            <ul class="changelog-changes">
+                ${entry.changes.map(c => `<li>${escapeHtml(c)}</li>`).join('')}
+            </ul>
+        </div>`).join('');
+}
+
+function openChangelogModal() {
+    renderChangelogModal();
+    document.getElementById('changelogModal').classList.remove('hidden');
+    track('changelog_open');
+}
+
+function closeChangelogModal() {
+    document.getElementById('changelogModal').classList.add('hidden');
 }
 
 function checkLiberoFrontRow(team) {

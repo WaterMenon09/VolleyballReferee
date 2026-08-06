@@ -32,7 +32,7 @@ Four views are shown/hidden by toggling the `hidden` class on their container di
 3. `#scoreboard` — active game screen
 4. `#matchResult` — post-match result
 
-Nine modals are used across screens: `#subModal` (player substitution, overlays scoreboard), `#timeoutModal` (30-second countdown, overlays scoreboard), `#setBreakModal` (3-minute set break timer, shown between sets), `#returnToSetupModal` (confirmation dialog for returning to setup mid-match), `#deciderSwitchModal` (side-switch notification at 8 points in the deciding set), `#serveSwitchModal` (confirmation for a manual serve flip, added v4.12), `#settingsModal` (configurable match rules and app preferences), `#feedbackModal` (in-app feedback form via Web3Forms), and `#historyModal` (match history log).
+Ten modals are used across screens: `#subModal` (player substitution, overlays scoreboard), `#timeoutModal` (30-second countdown, overlays scoreboard), `#setBreakModal` (3-minute set break timer, shown between sets), `#returnToSetupModal` (confirmation dialog for returning to setup mid-match), `#deciderSwitchModal` (side-switch notification at 8 points in the deciding set), `#serveSwitchModal` (confirmation for a manual serve flip, added v4.12), `#settingsModal` (configurable match rules and app preferences), `#feedbackModal` (in-app feedback form via Web3Forms), `#historyModal` (match history log), and `#changelogModal` (in-app "What's new", added v4.22).
 
 ### State management
 
@@ -106,6 +106,14 @@ Enforcement is defence-in-depth, same shape as the v4.11 libero fix: `showSubMod
 - Cleared at the set transition in `checkSetWin()` and in `resetMatchState()`. Deliberately **not** swapped by `switchSides()` — that runs only at the set boundary, after the reset, so there is nothing left to swap.
 - **The libero is outside this system entirely.** FIVB 19 replacements are not substitutions: they create no pair and never consume the cap. Two helpers keep it that way — `isLiberoReturn()` (the libero going back off arrives at `makeSubstitution()` with `isLibero === false`, via the "Return original player" chip) and `liberoSlotBlockReason()` (a bench player may not be substituted straight into a libero-covered slot; the libero comes off first). Without the latter, `recordSubstitution()` reads the slot's occupant as the "starter" and files a pair naming the *libero*, locking the covered player out of the set.
 - `substitutionsPerSet` is a **match rule**: `null` = unlimited, `0` = a literal "none permitted". Never `Infinity` — `JSON.stringify(Infinity)` is `null`, so it cannot round-trip. Read it only through `getRules()`; `NULLABLE_SETTINGS` exists because `onSettingChange()`'s `parseInt('')` → `NaN` would otherwise revert an intentionally cleared field.
+
+### In-app changelog (v4.22)
+
+`#changelogModal` renders `CHANGELOG_ENTRIES`, an array in `app.js`. It deliberately does **not** `fetch('./CHANGELOG.md')` — that file is developer-toned, and fetching it would need adding to `APP_SHELL` in `sw.js` to survive offline.
+
+> **Release chore:** `CHANGELOG_ENTRIES` does not read `CHANGELOG.md`. **Add a user-facing entry to the array whenever you add one to `CHANGELOG.md`,** or the in-app panel silently goes stale. Write it for a referee, not a developer.
+
+The button (`#changelogBtn`) is shown only on `#setup`, via `updateAppBarForScreen(name)` called from `trackScreen()` — the one function that already fires at every screen entry point. It is called **before** the `ANALYTICS_DISABLED` guard so an ad blocker (which blocks `gtag` but not `app.js`) cannot strand the button.
 
 ### Screen tracking / virtual page views (v4.21)
 

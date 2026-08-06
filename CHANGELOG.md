@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.22 — 2026-08-07
+
+An in-app "What's new" panel, so changes are visible to whoever wants to read them without leaving the app, plus the metadata that makes a shared link unfurl properly.
+
+### Added
+- **"What's new" button on the home screen** — a small icon beside the gear that opens a readable summary of recent releases, written for referees rather than developers. It appears only on the setup screen; mid-match the app bar stays out of the way
+- **Open Graph and Twitter card tags** — sharing the app previously unfurled as bare text. It now carries a title, description, and icon on every platform that reads them
+
+### Fixed
+- The web manifest claimed the app icon existed at 192×192 as well as 512×512. Only the 512×512 file was ever there, so the smaller declaration was a lie browsers had to work around by downscaling. It now states only what is true
+
+### Internal
+- Changelog content is an in-app array rather than a fetch of `CHANGELOG.md`: the raw file is developer-toned, and fetching it would need adding to the service worker's precache list to survive offline. **The array must be updated with each release** — it does not read this file
+- Homepage-only visibility hangs off `trackScreen()`, which since v4.21 already fires at every screen entry point, rather than adding toggles to the ~12 scattered places that show and hide screens. The app-bar update runs before the analytics guard, so an ad blocker cannot leave the button stranded
+- Service worker v4.2.2
+
 ## v4.21 — 2026-08-06
 
 Substitutions now follow the FIVB rulebook. A starter and their substitute are locked to each other for the rest of the set, so a player can no longer be walked around the court by subbing out and back in somewhere else — the loophole that quietly defeated the rotation rule the scoresheet exists to enforce.

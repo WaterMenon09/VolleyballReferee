@@ -158,7 +158,24 @@ body::after {
 }
 .app-brand b { color: var(--gold); font-weight: 800; }
 .app-brand-mark { color: var(--gold); flex-shrink: 0; }
-.app-bar-actions { display: flex; gap: var(--sp-2); align-items: center; }
+.app-bar-actions { display: flex; gap: var(--sp-2); align-items: center; flex-shrink: 0; }
+
+/* v4.22 — the app bar gained a fourth button (#changelogBtn) and "VolleyballReferee" is a single
+   unbreakable word, so the brand's implicit `min-width: auto` floored it at 186px. Nothing could
+   give, and the actions block overflowed the bar's right edge on phones, shearing #historyBtn to a
+   ~17px sliver at 375px. Because .app-bar is `position: fixed` this does NOT register as document
+   horizontal scroll — a page-level overflow check passes it silently, so measure
+   `.app-bar-actions` right edge against clientWidth instead.
+   Two guards: the brand may now shrink rather than force overflow at ANY width (so adding a fifth
+   button degrades instead of breaking), and below 460px the wordmark is dropped entirely — the
+   volleyball mark still identifies the app, and a truncated wordmark reads as broken rather than
+   deliberate. .app-bar-actions never shrinks, so touch targets stay at 44px. */
+.app-brand { min-width: 0; }
+.app-brand span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 460px) {
+    .app-brand span { display: none; }
+}
 
 .hidden {
     display: none !important;
@@ -1094,7 +1111,8 @@ textarea:focus-visible,
 /* left-aligned modals: left-align the underline bar */
 .settings-modal-content h2::after,
 .feedback-modal-content h2::after,
-.history-modal-content h2::after { margin-left: 0; }
+.history-modal-content h2::after,
+.changelog-modal-content h2::after { margin-left: 0; }
 
 .timer-display {
     width: 180px; height: 180px; margin: var(--sp-5) auto; position: relative;
@@ -2841,6 +2859,65 @@ textarea:focus-visible,
 }
 
 .history-modal-content .btn-secondary {
+    display: block;
+    margin: 0 auto;
+    min-width: 120px;
+}
+
+/* ── Changelog Modal ─────────────────────────────────────────────────────── */
+
+.changelog-modal-content {
+    text-align: left;
+    max-width: 520px;
+}
+
+.changelog-modal-content h2 {
+    text-align: left;
+}
+
+.changelog-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    margin-bottom: var(--sp-5);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--gold-rgb), 0.3) transparent;
+}
+
+.changelog-list::-webkit-scrollbar { width: 4px; }
+.changelog-list::-webkit-scrollbar-track { background: transparent; }
+.changelog-list::-webkit-scrollbar-thumb {
+    background: rgba(var(--gold-rgb), 0.3);
+    border-radius: 2px;
+}
+
+.changelog-entry {
+    background: var(--surface-1); border: 1px solid var(--stroke-1);
+    border-radius: var(--r-md); padding: var(--sp-4);
+    margin-bottom: var(--sp-3); text-align: left;
+}
+
+.changelog-entry:last-child { margin-bottom: 0; }
+
+.changelog-entry-header {
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-2);
+}
+
+.changelog-version {
+    font: 700 1.05rem/1.1 var(--font-display); letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold);
+}
+
+.changelog-date {
+    color: var(--ink-45); font-size: 0.8rem;
+}
+
+.changelog-changes {
+    margin: 0; padding-left: 1.1em; color: var(--ink-85); font-size: 0.92rem; line-height: 1.5;
+}
+
+.changelog-changes li { margin-bottom: var(--sp-2); }
+.changelog-changes li:last-child { margin-bottom: 0; }
+
+.changelog-modal-content .btn-secondary {
     display: block;
     margin: 0 auto;
     min-width: 120px;
