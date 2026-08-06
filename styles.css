@@ -2308,7 +2308,8 @@ textarea:focus-visible,
 }
 
 .box-score thead th.box-score-sets-col,
-.box-score tbody td.box-score-sets-col {
+.box-score tbody td.box-score-sets-col,
+.box-score tfoot td.box-score-sets-col {
     border-left: 1px solid var(--stroke-2);
 }
 
@@ -3120,6 +3121,56 @@ textarea:focus-visible,
 #submitFeedback:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* ── v4.21 ─────────────────────────────────────────────────────────────────── */
+
+/* Task 9 — per-set duration row in the box score. Deliberately lighter than the score
+   rows: it is context, not the result. */
+.box-score tfoot td {
+    height: 36px;
+    box-sizing: border-box;
+    padding: var(--sp-2) var(--sp-3);
+    text-align: center;
+    vertical-align: middle;
+    font: 600 0.8rem/1 var(--font-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-65);
+    border-top: 1px solid var(--stroke-2);
+}
+
+.box-score tfoot td.box-score-name {
+    text-align: left;
+    font: 700 0.68rem/1 var(--font-body);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* Task 10 — settings row whose label carries a hint under it. The base .settings-grid label
+   is a centred flex row; stacking needs the column direction and a start-aligned cross axis. */
+.settings-grid label.settings-label-stack {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    padding: var(--sp-2) 0;
+}
+
+.settings-grid label.settings-label-stack .settings-hint {
+    margin-top: 0;
+}
+
+/* Tasks 1 + 10 — substitution allowance line in the sub modal. */
+.sub-rule-note {
+    margin: 0 0 var(--sp-3);
+    font: 600 0.8rem/1.35 var(--font-body);
+    color: var(--ink-65);
+    text-align: center;
+}
+
+.sub-rule-note.at-limit {
+    color: var(--error-text);
 }
 
 /* ── Reduced motion — MUST be last rule block (cascade wins over everything) ── */

@@ -21,7 +21,10 @@
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', 'G-RBPL9H3D0Y');
+      // send_page_view: false — app.js sends a virtual page_view per screen (trackScreen).
+      // Without this the automatic pageview double-counts the landing alongside the Setup
+      // screen's own, inflating exactly the report the virtual pageviews exist to produce.
+      gtag('config', 'G-RBPL9H3D0Y', { send_page_view: false });
     </script>
 </head>
 <body>
@@ -288,6 +291,7 @@
         <div class="modal-content sub-modal-content">
             <h2>Substitute Player</h2>
             <p id="subCurrentPlayer"></p>
+            <p id="subRuleNote" class="sub-rule-note hidden" role="status"></p>
             <div class="sub-options" id="subOptions"></div>
             <button class="btn btn-secondary" id="cancelSub">Cancel</button>
         </div>
@@ -388,6 +392,11 @@
                     <label for="setFinalSetPoints">Points per deciding set</label>
                     <input type="number" id="setFinalSetPoints" data-setting="finalSetPoints" inputmode="numeric" min="5" max="50" step="1">
 
+                    <label for="setSubstitutionsPerSet" class="settings-label-stack">Substitutions per team per set
+                        <span class="settings-hint">Leave empty for unlimited &middot; 6 for FIVB indoor</span>
+                    </label>
+                    <input type="number" id="setSubstitutionsPerSet" data-setting="substitutionsPerSet" inputmode="numeric" min="0" max="15" step="1" placeholder="&#8734;">
+
                     <label for="setTechnicalTimeouts">Technical timeouts (8 &amp; 16 pts, 60s)</label>
                     <input type="checkbox" class="switch" id="setTechnicalTimeouts" data-setting="technicalTimeouts">
                 </div>
@@ -445,7 +454,7 @@
       </div>
     </div>
 
-    <footer class="credits">v4.20 | Created by Menon Pranto</footer>
+    <footer class="credits">v4.21 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
     <script>

@@ -11,6 +11,13 @@ const state = {
     team2Rotation: [],
     team1Subs: {},
     team2Subs: {},
+    // v4.21 (Tasks 1 + 10): per-set substitution pairing log, keyed by PLAYER IDENTITY —
+    // never by court position, because rotateTeam() remaps position keys on every side-out.
+    // One record per starter<->substitute pair: { starter, sub, returned }. Enforces FIVB
+    // 15.6.2 / 15.6.3 and doubles as the per-set substitution counter (see subEntriesUsed).
+    // Libero replacements are NOT substitutions (FIVB 19) and never appear here.
+    team1SubPairs: [],
+    team2SubPairs: [],
     team1LiberoIn: null,
     team2LiberoIn: null,
     hasRotation: false,
@@ -36,6 +43,10 @@ const state = {
     matchStarted: false,
     deciderSideSwitched: false,
     matchStartedAt: null,
+    // v4.21 (Task 9): transient per-set start stamp. setHistory entries are only pushed at
+    // set END, so the start time cannot be written to the entry during the set — it is
+    // stamped at the set's first rally here and copied into the entry at push time.
+    currentSetStartedAt: null,
     matchDurationSec: null,
     rules: null,
     techTimeoutsFired: []
@@ -63,17 +74,27 @@ const DEFAULT_SETTINGS = Object.freeze({
     setBreakDuration: 180,    // seconds, 30–600
     regularSetPoints: 25,     // 5–50
     finalSetPoints: 15,       // 5–50
+    // v4.21: per team, per set. null = unlimited (the default — purely additive, so existing
+    // users see no behaviour change). NOT Infinity: JSON.stringify(Infinity) is `null`, so it
+    // cannot survive the vb-settings round-trip as a distinct value. NOT 0 either — 0 is a
+    // legitimate literal setting meaning "no substitutions permitted".
+    substitutionsPerSet: null,
     // app prefs (read live)
     sound: true,
     vibration: true,
     keepAwake: true
 });
 const RULE_KEYS = ['timeoutDuration', 'timeoutsPerSet', 'technicalTimeouts',
-                   'setBreakDuration', 'regularSetPoints', 'finalSetPoints'];
+                   'setBreakDuration', 'regularSetPoints', 'finalSetPoints',
+                   'substitutionsPerSet'];
 const SETTINGS_RANGES = {
     timeoutDuration: [10, 120], timeoutsPerSet: [0, 4],
-    setBreakDuration: [30, 600], regularSetPoints: [5, 50], finalSetPoints: [5, 50]
+    setBreakDuration: [30, 600], regularSetPoints: [5, 50], finalSetPoints: [5, 50],
+    substitutionsPerSet: [0, 15]  // clamp applies only when a number is actually present
 };
+// Numeric settings for which an EMPTY field is a real value (null), not invalid input.
+// onSettingChange() would otherwise hit parseInt('') -> NaN and revert the field.
+const NULLABLE_SETTINGS = new Set(['substitutionsPerSet']);
 const TECH_TIMEOUT_DURATION = 60;        // seconds, fixed per FIVB rules
 const TECH_TIMEOUT_THRESHOLDS = [8, 16]; // leading-score thresholds, fixed per FIVB rules
 
@@ -92,11 +113,11 @@ let _dndInitialized = false;
 let _restoredRotationSetup = null;
 
 const STORAGE_KEY = 'vb-match-state';
-const STORAGE_SCHEMA = 3;
+const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.20';
+const APP_VERSION = 'v4.21';
 
 // ── Feedback (Web3Forms) ──────────────────────────────────────────────────
 const WEB3FORMS_ACCESS_KEY = '24f54e6d-d6a5-4b1e-82bf-7952024d7886'; // TODO(owner): paste key from web3forms.com
@@ -116,6 +137,72 @@ function track(name, params) {
             window.gtag('event', name, Object.assign({ app_version: APP_VERSION }, params || {}));
         }
     } catch (_) {}
+}
+
+// ── Virtual page views (v4.21) ────────────────────────────────────────────────────────
+// The app never navigates, so GA4 records exactly ONE page_view per session and attributes
+// every second of engagement to it. That makes "which screen gets the most traffic" and
+// "which screen holds attention" unanswerable. Sending a virtual page_view whenever a screen
+// becomes visible drives GA4's built-in Pages-and-screens report — views AND average
+// engagement time per screen — with no timer code of our own, because GA4 attributes its
+// automatic engagement measurement to the most recent page_view.
+//
+// Deliberately ADDITIVE: every call below is a tail call at a screen's entry point, and no
+// existing line changes. Routing the ~12 scattered `hidden` toggles through a central
+// showScreen() helper would yield identical analytics while refactoring match-flow code on a
+// scoresheet that must not break mid-match. If that refactor is ever wanted it belongs in its
+// own reviewed change, not smuggled in under analytics.
+const SCREEN_TITLES = {
+    setup: 'Setup',
+    rotationSetup: 'Rotation Setup',
+    scoreboard: 'Scoreboard',
+    matchResult: 'Match Result'
+};
+const SCREEN_IDS = ['setup', 'rotationSetup', 'scoreboard', 'matchResult'];
+let _currentScreen = null;
+
+// A real path per screen, NOT a '#fragment'. GA4 strips everything after '#' when deriving the
+// page-path dimension, so a hash-based location collapses all four screens onto a single row in
+// every path-keyed report and landing-page report. Nothing is ever written to location.hash —
+// this string is reported to GA4 only, so the URL bar and back button are untouched.
+function screenUrl(name) {
+    const base = location.pathname.replace(/index\.html$/, '');
+    return location.origin + (base.endsWith('/') ? base : base + '/') + name;
+}
+
+function trackScreen(name) {
+    // Dedupe. Several flows hide and re-show the SAME screen — showSetBreakModal() /
+    // closeSetBreakModal() do it to the scoreboard every set break — and each of those would
+    // otherwise land as a fresh page_view, inflating views and chopping engagement time into
+    // meaningless slices.
+    if (name === _currentScreen) return;
+    _currentScreen = name;
+
+    const page_title = SCREEN_TITLES[name] || name;
+    const page_location = screenUrl(name);
+
+    // gtag('set', ...) BEFORE the event, deliberately. Event-scoped params apply only to their
+    // own event, so without this GA4's automatic user_engagement hits — the ones that actually
+    // carry engagement_time_msec — would keep reporting the bare landing URL, and per-screen
+    // dwell time (the entire point of this change) would pool onto one row. `set` params are
+    // inherited by every subsequent hit, which is what makes the attribution follow the screen.
+    if (!ANALYTICS_DISABLED) {
+        try {
+            if (typeof window.gtag === 'function') window.gtag('set', { page_title, page_location });
+        } catch (_) {}
+    }
+
+    track('page_view', { page_title, page_location });
+}
+
+// For paths with no single named entry point — notably every restoreSavedMatch() branch —
+// report whichever screen actually ended up visible.
+function trackVisibleScreen() {
+    const visible = SCREEN_IDS.find(id => {
+        const el = document.getElementById(id);
+        return el && !el.classList.contains('hidden');
+    });
+    if (visible) trackScreen(visible);
 }
 
 window.addEventListener('error', e => {
@@ -431,7 +518,10 @@ function syncSettingsInputs() {
         if (input.type === 'checkbox') {
             input.checked = !!settings[key];
         } else {
-            input.value = settings[key];
+            // `?? ''` explicitly: substitutionsPerSet is the first setting that can be null,
+            // and an empty field is what "unlimited" looks like. Don't rely on the DOM's
+            // null-to-empty coercion — it renders undefined as the string "undefined".
+            input.value = settings[key] ?? '';
         }
     });
 
@@ -468,15 +558,22 @@ function onSettingChange(input) {
             }
         }
     } else {
-        const n = parseInt(input.value, 10);
-        const range = SETTINGS_RANGES[key];
-        if (Number.isNaN(n)) {
-            input.value = settings[key]; // invalid → revert
-            return;
+        const raw = String(input.value).trim();
+        if (raw === '' && NULLABLE_SETTINGS.has(key)) {
+            // Clearing the field is a real choice ("unlimited"), not invalid input.
+            settings[key] = null;
+            input.value = '';
+        } else {
+            const n = parseInt(raw, 10);
+            const range = SETTINGS_RANGES[key];
+            if (Number.isNaN(n)) {
+                input.value = settings[key] ?? ''; // invalid → revert (null renders as empty)
+                return;
+            }
+            const clamped = range ? Math.min(range[1], Math.max(range[0], n)) : n;
+            settings[key] = clamped;
+            input.value = clamped; // reflect clamping back to the field
         }
-        const clamped = range ? Math.min(range[1], Math.max(range[0], n)) : n;
-        settings[key] = clamped;
-        input.value = clamped; // reflect clamping back to the field
     }
     saveSettings();
     track('settings_changed', { setting: key, value: String(settings[key]) });
@@ -503,6 +600,25 @@ function migrate(saved, fromVersion) {
         };
         st.techTimeoutsFired = [];
         return { _schema: 3, state: st, rotationSetup: saved.rotationSetup || null };
+    }
+    if (fromVersion === 3) {
+        // v4.21 — Tasks 1, 9 and 10 all add persisted state; one bump covers all three.
+        const st = saved.state || {};
+        st.team1SubPairs = [];
+        st.team2SubPairs = [];
+        st.currentSetStartedAt = null;   // v3 never recorded it; the set's duration stays hidden
+        // A v3 match was definitionally played with no substitution limit — same reasoning as
+        // the hardcoded v2-era constants above. getRules() reads `== null` so an absent key
+        // would also fail open, but seed it explicitly so the snapshot states its own rules.
+        if (st.rules) st.rules.substitutionsPerSet = null;
+        // Undo snapshots are hand-maintained field lists; seed the new fields in the ones
+        // already on the stack or an undo into a v3 point would restore `undefined`.
+        (Array.isArray(st.pointHistory) ? st.pointHistory : []).forEach(snap => {
+            snap.team1SubPairs = [];
+            snap.team2SubPairs = [];
+            snap.currentSetStartedAt = null;
+        });
+        return { _schema: 4, state: st, rotationSetup: saved.rotationSetup || null };
     }
     return null;
 }
@@ -915,6 +1031,12 @@ function init() {
     });
 
     restoreSavedMatch();
+
+    // Catch-all AFTER restore: covers the default landing on #setup and every restoreSavedMatch()
+    // branch that routes to a screen without a named entry point. Branches that do have one
+    // (endMatch, showRotationSetup, showNewSetRotationSetup) have already reported, and the
+    // trackScreen dedupe swallows this call for them.
+    trackVisibleScreen();
 }
 
 function toggleService() {
@@ -1118,6 +1240,139 @@ function handleGamePositionClick(e) {
     showSubModal(team, position);
 }
 
+// ── Substitution rules (FIVB 15.6.1 / 15.6.2 / 15.6.3) — v4.21 ────────────────────────
+// 15.6.2  A starter may leave the game only once per set and re-enter only once per set,
+//         and only into their previous position in the line-up.
+// 15.6.3  A substitute may enter only once per set in place of a starter, and may only be
+//         replaced by that same starter.
+// Together these lock a starter and their substitute into a pair for the rest of the set,
+// which is exactly what state.team{1,2}SubPairs records. Enforcement is by PAIR IDENTITY,
+// not court position: rotateTeam() moves position indices under us every side-out.
+//
+// The libero is governed by FIVB 19, not 15.6 — a libero replacement is NOT a substitution.
+// It never reaches any function below, never creates a pair, and never counts against the cap.
+
+function subPairs(team) {
+    const key = team === 1 ? 'team1SubPairs' : 'team2SubPairs';
+    if (!Array.isArray(state[key])) state[key] = []; // self-heal legacy/partial restores
+    return state[key];
+}
+
+// Court ENTRIES used this set — FIVB 15.6.1 counts entries onto the court, not pairs, so a
+// starter going out and coming back consumes two of the allowance. Derived, never stored:
+// one structure, two readers (the pair lock above and the cap below).
+function subEntriesUsed(team) {
+    const pairs = subPairs(team);
+    return pairs.length + pairs.filter(p => p.returned).length;
+}
+
+// Why the cap forbids another entry, or null if it doesn't. `== null` (loose) so a legacy
+// rules snapshot with the key absent reads as unlimited rather than throwing — failing open
+// matches the pre-v4.21 behaviour, which is the safe direction.
+function subCapBlockReason(team) {
+    const cap = getRules().substitutionsPerSet;
+    if (cap == null) return null;
+    if (subEntriesUsed(team) < cap) return null;
+    return cap === 0
+        ? 'No substitutions are permitted under this match’s rules.'
+        : `Substitution limit reached — ${cap} per team per set (FIVB 15.6.1).`;
+}
+
+// Why this substitution is illegal, or null if it is legal. Player numbers are strings
+// everywhere (setup parses them with .split(',').map(n => n.trim())) and dataset.player is a
+// string too, but normalise anyway: a strict-equality mismatch here would fail OPEN silently.
+function substitutionBlockReason(team, rotationIndex, newPlayer) {
+    const rotation = team === 1 ? state.team1Rotation : state.team2Rotation;
+    const pairs = subPairs(team);
+    const current = String(rotation[rotationIndex]);
+    const incoming = String(newPlayer);
+
+    if (incoming === current) return null; // no-op, nothing to police
+
+    // The slot may be held by the LIBERO, who is not a party to any substitution pair. Treating
+    // that as an ordinary substitution would file a pair naming the libero as the starter — see
+    // liberoSlotBlockReason() for why that is not a bookkeeping detail.
+    const liberoSlot = liberoSlotBlockReason(team, rotationIndex, newPlayer);
+    if (liberoSlot) return liberoSlot;
+
+    const openForCurrent = pairs.find(p => p.sub === current && !p.returned);
+    if (openForCurrent) {
+        // The player on court came on as a substitute (FIVB 15.6.3): only the starter they
+        // replaced may replace them.
+        if (incoming !== openForCurrent.starter) {
+            return `#${current} came on for #${openForCurrent.starter} and can only be replaced by #${openForCurrent.starter} (FIVB 15.6.3).`;
+        }
+        return subCapBlockReason(team); // legal pairing — only the cap can still stop it
+    }
+
+    // From here, `incoming` would be entering as a substitute for `current`.
+    if (pairs.some(p => p.sub === incoming)) {
+        return `#${incoming} has already been substituted on in this set and cannot enter again (FIVB 15.6.3).`;
+    }
+    const openForIncoming = pairs.find(p => p.starter === incoming && !p.returned);
+    if (openForIncoming) {
+        return `#${incoming} started this set and can only return in place of #${openForIncoming.sub} (FIVB 15.6.2).`;
+    }
+    if (pairs.some(p => p.starter === incoming)) {
+        // Left and returned already, so no entries remain. Not reachable while they are on
+        // court (and they would be), but fail closed rather than trust the caller.
+        return `#${incoming} has already used their re-entry in this set (FIVB 15.6.2).`;
+    }
+    if (pairs.some(p => p.starter === current)) {
+        return `#${current} has already been substituted once in this set and cannot leave again (FIVB 15.6.2).`;
+    }
+    return subCapBlockReason(team);
+}
+
+// Writes the pair record for a substitution already cleared by substitutionBlockReason().
+function recordSubstitution(team, rotationIndex, newPlayer) {
+    const rotation = team === 1 ? state.team1Rotation : state.team2Rotation;
+    const pairs = subPairs(team);
+    const current = String(rotation[rotationIndex]);
+    const incoming = String(newPlayer);
+
+    const openForCurrent = pairs.find(p => p.sub === current && !p.returned);
+    if (openForCurrent && incoming === openForCurrent.starter) {
+        openForCurrent.returned = true; // starter re-enters: the pair's second entry
+    } else {
+        pairs.push({ starter: current, sub: incoming, returned: false });
+    }
+}
+
+// True when selecting `newPlayer` at this slot is the LIBERO leaving the court (the original
+// player returning), not a substitution. This flows through makeSubstitution() with
+// isLibero === false — the "Return original player" chip carries no data-is-libero — so it
+// must be recognised here or a libero replacement would be counted and rule-checked.
+function isLiberoReturn(team, rotationIndex, newPlayer) {
+    const rotation = team === 1 ? state.team1Rotation : state.team2Rotation;
+    const subs = team === 1 ? state.team1Subs : state.team2Subs;
+    const libero = team === 1 ? state.team1Libero : state.team2Libero;
+    if (!libero || String(rotation[rotationIndex]) !== String(libero)) return false;
+    return !!subs[rotationIndex] && String(subs[rotationIndex].original) === String(newPlayer);
+}
+
+// A slot the LIBERO is currently covering cannot be substituted into in one step. Under FIVB 19
+// the libero replacement is undone first (the covered player returns), and only then is a
+// substitution possible — so the app must not offer the shortcut.
+//
+// This is a rule gate, not bookkeeping. Allowing it filed a pair of {starter: <libero>, sub: B},
+// because recordSubstitution() reads the slot's current occupant as the starter. That pair then
+// matched FIVB 15.6.3 against the covered player forever after: they could never come back on,
+// and the refusal quoted the LIBERO's number at the scorer. It also burned a cap entry.
+function liberoSlotBlockReason(team, rotationIndex, newPlayer) {
+    const rotation = team === 1 ? state.team1Rotation : state.team2Rotation;
+    const subs = team === 1 ? state.team1Subs : state.team2Subs;
+    const libero = team === 1 ? state.team1Libero : state.team2Libero;
+
+    if (!libero || String(rotation[rotationIndex]) !== String(libero)) return null;
+    if (isLiberoReturn(team, rotationIndex, newPlayer)) return null; // the libero going back off
+
+    const covered = subs[rotationIndex] && subs[rotationIndex].original;
+    return covered
+        ? `The libero is covering #${covered} here — bring #${covered} back on first, then substitute.`
+        : 'The libero is on court here — take the libero off first, then substitute.';
+}
+
 function showSubModal(team, position) {
     const modal = document.getElementById('subModal');
     const optionsContainer = document.getElementById('subOptions');
@@ -1142,6 +1397,16 @@ function showSubModal(team, position) {
 
     let html = '';
 
+    // v4.21: the first pair-lock reason among the chips we grey out, surfaced on screen below.
+    // `title=` tooltips never fire on touch and this app is used on a phone at the scorer's
+    // table, so a tooltip alone IS a silent failure. Cap reasons are excluded — the allowance
+    // line already states those.
+    let lockReason = null;
+    const capReasonText = subCapBlockReason(team);
+    const noteLockReason = reason => {
+        if (reason && !lockReason && reason !== capReasonText) lockReason = reason;
+    };
+
     const makeSubEl = (player, classes, attrs = {}) => {
         const el = document.createElement('div');
         el.className = ['sub-option', ...classes].join(' ');
@@ -1155,7 +1420,17 @@ function showSubModal(team, position) {
 
     if (subs[rotationIndex] && currentPlayer !== subs[rotationIndex].original) {
         const original = subs[rotationIndex].original;
-        fragment.appendChild(makeSubEl(original, ['return-player'], { title: 'Return original player' }));
+        // A libero going back off is not a substitution, so it is never rule- or cap-checked.
+        // A starter returning IS an entry (FIVB 15.6.1) and can be blocked by the cap.
+        const reason = isLiberoReturn(team, rotationIndex, original)
+            ? null
+            : substitutionBlockReason(team, rotationIndex, original);
+        if (reason) {
+            noteLockReason(reason);
+            fragment.appendChild(makeSubEl(original, ['return-player', 'disabled'], { title: reason }));
+        } else {
+            fragment.appendChild(makeSubEl(original, ['return-player'], { title: 'Return original player' }));
+        }
     }
 
     if (libero && !playersOnCourt.includes(libero)) {
@@ -1171,15 +1446,30 @@ function showSubModal(team, position) {
         }
     }
 
+    // Every element below is a real substitution — the libero was already handled above and
+    // is skipped on the first line, so none of the v4.21 rule/cap gating can touch it.
     availableSubs.forEach(player => {
         if (player === libero) return;
         if (subs[rotationIndex] && player === subs[rotationIndex].original) return;
 
+        // v4.21: FIVB 15.6.2 / 15.6.3 pair lock + the per-set substitution cap.
+        const reason = substitutionBlockReason(team, rotationIndex, player);
+        if (reason) {
+            noteLockReason(reason);
+            fragment.appendChild(makeSubEl(player, ['disabled'], { title: reason }));
+            return;
+        }
+
+        // Structural guard, not a rule: `player` can also be off court because the LIBERO is
+        // covering their slot, which leaves a subs[] entry but creates no substitution pair.
+        // Bringing them on elsewhere would duplicate them the moment the libero is evicted.
         const subEntry = Object.entries(subs).find(([idx, sub]) => sub.original === player);
         if (subEntry) {
             const [subIdx] = subEntry;
             if (parseInt(subIdx) !== rotationIndex) {
-                fragment.appendChild(makeSubEl(player, ['disabled'], { title: `Can only return to position ${parseInt(subIdx) + 1}` }));
+                const posReason = `#${player} is covered by the libero at position ${parseInt(subIdx) + 1} and can only return there.`;
+                noteLockReason(posReason);
+                fragment.appendChild(makeSubEl(player, ['disabled'], { title: posReason }));
                 return;
             }
         }
@@ -1196,6 +1486,23 @@ function showSubModal(team, position) {
     optionsContainer.querySelectorAll('.sub-option:not(.disabled)').forEach(opt => {
         opt.addEventListener('click', handleSubSelect);
     });
+
+    // v4.21 Task 10: show the allowance so a referee sees the limit before tapping, rather
+    // than meeting a silently disabled chip. Hidden entirely when no cap is configured.
+    const noteEl = document.getElementById('subRuleNote');
+    if (noteEl) {
+        const cap = getRules().substitutionsPerSet;
+        const atLimit = cap != null && subEntriesUsed(team) >= cap;
+        const lines = [];
+        if (cap != null) {
+            lines.push(`Substitutions: ${subEntriesUsed(team)} of ${cap} used${atLimit ? ' — limit reached' : ''}`);
+        }
+        if (lockReason) lines.push(lockReason);
+        // escapeHtml per line: reasons interpolate jersey numbers, which are user-entered.
+        noteEl.innerHTML = lines.map(escapeHtml).join('<br>');
+        noteEl.classList.toggle('at-limit', atLimit);
+        noteEl.classList.toggle('hidden', lines.length === 0);
+    }
 
     modal.classList.remove('hidden');
 }
@@ -1215,6 +1522,27 @@ function makeSubstitution(team, position, newPlayer, isLibero) {
     const positionMap = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 };
     const rotationIndex = positionMap[position];
     const currentPlayer = rotation[rotationIndex];
+
+    // v4.21 Tasks 1 + 10 — defence in depth; showSubModal() already gates the UI.
+    // Deliberately scoped to real substitutions: `isLibero` covers the libero coming ON, and
+    // isLiberoReturn() covers the libero going back OFF (which arrives here with isLibero
+    // false, via the "Return original player" chip). Neither is a substitution under FIVB 19,
+    // so neither is rule-checked, recorded, or counted against the cap.
+    if (!isLibero && !isLiberoReturn(team, rotationIndex, newPlayer)) {
+        if (String(newPlayer) === String(currentPlayer)) return; // no-op
+        const blocked = substitutionBlockReason(team, rotationIndex, newPlayer);
+        if (blocked) {
+            track('substitution_blocked', { team, set: state.currentSet });
+            return;
+        }
+        // Structural guard mirroring showSubModal(): the incoming player is still recorded as
+        // the original of a libero replacement elsewhere on court, so bringing them on here
+        // would duplicate them when that libero is evicted.
+        const occupied = Object.entries(subs).find(([idx, sub]) => String(sub.original) === String(newPlayer));
+        if (occupied && parseInt(occupied[0]) !== rotationIndex) return;
+
+        recordSubstitution(team, rotationIndex, newPlayer);
+    }
 
     let subType;
     if (isLibero) {
@@ -1440,6 +1768,8 @@ function swapTeams() {
     [state.team1Libero, state.team2Libero] = [state.team2Libero, state.team1Libero];
     [state.team1Rotation, state.team2Rotation] = [state.team2Rotation, state.team1Rotation];
     [state.team1Subs, state.team2Subs] = [state.team2Subs, state.team1Subs];
+    // v4.21: the pair log is team-specific (unlike techTimeoutsFired), so it must swap.
+    [state.team1SubPairs, state.team2SubPairs] = [subPairs(2), subPairs(1)];
     [state.team1LiberoIn, state.team2LiberoIn] = [state.team2LiberoIn, state.team1LiberoIn];
     [state.team1OriginalId, state.team2OriginalId] = [state.team2OriginalId, state.team1OriginalId];
     [state.lastStartingRotation1, state.lastStartingRotation2] = [state.lastStartingRotation2, state.lastStartingRotation1];
@@ -1478,6 +1808,10 @@ function swapTeams() {
         team2Rotation: snap.team1Rotation,
         team1Subs: snap.team2Subs,
         team2Subs: snap.team1Subs,
+        // v4.21: team-specific, so it swaps with everything else. currentSetStartedAt is
+        // deliberately absent — it is team-neutral and the `...snap` spread carries it over.
+        team1SubPairs: snap.team2SubPairs,
+        team2SubPairs: snap.team1SubPairs,
         team1LiberoIn: snap.team2LiberoIn,
         team2LiberoIn: snap.team1LiberoIn,
         currentSetPoints: snap.currentSetPoints.map(p => ({
@@ -1744,12 +2078,20 @@ function showRotationSetup() {
     document.getElementById('rotationSetupSetScore').classList.add('hidden');
     updatePrevRotationButtons();
     initDragAndDrop();
+    trackScreen('rotationSetup');
 }
 
 function showNewSetRotationSetup() {
     state.team1Rotation = [];
     state.team2Rotation = [];
     saveState();
+    // #setup carries no `hidden` class in the markup, so it is the default-visible screen on a
+    // fresh page. Mid-match some earlier transition has already hidden it — but on a RELOAD
+    // straight into this screen (restoreSavedMatch's `hasRotation` branch) nothing has, and the
+    // whole setup form renders ABOVE the rotation screen, pushing it below the fold. Same bug
+    // class as the matchOver branch documented in restoreSavedMatch(). Hiding it here fixes
+    // every caller at once, and is a harmless no-op when it is already hidden.
+    document.getElementById('setup').classList.add('hidden');
     document.getElementById('scoreboard').classList.add('hidden');
     document.getElementById('rotationSetup').classList.remove('hidden');
 
@@ -1783,6 +2125,7 @@ function showNewSetRotationSetup() {
     scoreDisplay.innerHTML = `Match Score: <strong>${escapeHtml(state.team1Name)}</strong> ${state.team1Sets} - ${state.team2Sets} <strong>${escapeHtml(state.team2Name)}</strong>`;
     updatePrevRotationButtons();
     initDragAndDrop();
+    trackScreen('rotationSetup');
 }
 
 function updatePrevRotationButtons() {
@@ -1938,6 +2281,7 @@ function confirmRotationSetup() {
         // Just show scoreboard and update display with new rotations
         document.getElementById('scoreboard').classList.remove('hidden');
         updateDisplay();
+        trackScreen('scoreboard');
     } else {
         // Start a new match - this will reset state and set up all UI elements
         beginMatch();
@@ -1987,6 +2331,8 @@ function beginMatch() {
         document.getElementById('rotation2').classList.remove('hidden');
     }
 
+    trackScreen('scoreboard');
+
     track('match_start', {
         match_type: state.matchType,
         sets_to_win: state.setsToWin,
@@ -2026,6 +2372,8 @@ function resetMatchState() {
     state.team2Rotation = [];
     state.team1Subs = {};
     state.team2Subs = {};
+    state.team1SubPairs = [];
+    state.team2SubPairs = [];
     state.team1LiberoIn = null;
     state.team2LiberoIn = null;
     state.hasRotation = false;
@@ -2034,6 +2382,7 @@ function resetMatchState() {
     state.matchStarted = false;
     state.deciderSideSwitched = false;
     state.matchStartedAt = null;
+    state.currentSetStartedAt = null;
     state.matchDurationSec = null;
     _restoredRotationSetup = null;
 }
@@ -2045,6 +2394,7 @@ function resetToSetup() {
     document.getElementById('matchResult').classList.add('hidden');
     document.getElementById('rotationSetup').classList.add('hidden');
     resetMatchState();
+    trackScreen('setup');
 }
 
 function isDeciderSet() {
@@ -2076,9 +2426,18 @@ function addPoint(team) {
         team2Rotation: [...state.team2Rotation],
         team1Subs: JSON.parse(JSON.stringify(state.team1Subs)),
         team2Subs: JSON.parse(JSON.stringify(state.team2Subs)),
+        // Deep copy, not a spread: recordSubstitution() flips `returned` in place on an
+        // existing pair object, so a shallow copy would let that flip rewrite history.
+        team1SubPairs: JSON.parse(JSON.stringify(subPairs(1))),
+        team2SubPairs: JSON.parse(JSON.stringify(subPairs(2))),
+        currentSetStartedAt: state.currentSetStartedAt,
         team1LiberoIn: state.team1LiberoIn,
         team2LiberoIn: state.team2LiberoIn
     });
+
+    // v4.21 Task 9: stamp the set's first rally. Pushed AFTER the snapshot above, so undoing
+    // the first point of a set correctly clears the stamp again.
+    if (state.currentSetStartedAt == null) state.currentSetStartedAt = Date.now();
 
     _scorePulseTeam = team;
     if (team === 1) {
@@ -2134,8 +2493,15 @@ function checkSetWin() {
             team2Score: state.team2Score,
             winner: setWinner,
             winnerOriginalId: winnerOriginalId,
+            // v4.21 Task 9. Null on a set that began before the timestamps existed (a
+            // migrated schema-3 save) — the duration is simply hidden for that set.
+            startedAt: state.currentSetStartedAt,
+            endedAt: Date.now(),
             points: [...state.currentSetPoints]
         });
+        // Cleared here rather than in the set-transition branch below so it is also cleared
+        // on the match-ending branch, which does not fall through to those resets.
+        state.currentSetStartedAt = null;
 
         if (setWinner === 1) {
             state.team1Sets++;
@@ -2181,6 +2547,11 @@ function checkSetWin() {
             state.team2Timeouts = getRules().timeoutsPerSet;
             state.team1Subs = {};
             state.team2Subs = {};
+            // v4.21: substitution allowances and the FIVB 15.6 pair locks are per-set. Reset
+            // before switchSides() — which deliberately does not swap the substitution state,
+            // exactly because it is already cleared by this point.
+            state.team1SubPairs = [];
+            state.team2SubPairs = [];
             state.team1LiberoIn = null;
             state.team2LiberoIn = null;
             state.currentSetPoints = [];
@@ -2336,6 +2707,8 @@ function endMatch({ fromRestore = false } = {}) {
     document.getElementById('winner').textContent = `${winner} Wins!`;
 
     renderFinalScore(fromRestore);
+    // Fires on the restore path too, and should: reloading onto the result screen IS a view of it.
+    trackScreen('matchResult');
 }
 
 // v4.20 T1: semantic box-score table (replaces the .set-results-row pill row).
@@ -2349,6 +2722,20 @@ function buildBoxScoreTable(team1Color, team2Color) {
         `<td class="${s.winner === 1 ? 'box-score-win' : 'box-score-lose'}">${s.team1Score}</td>`).join('');
     const team2Cells = sets.map(s =>
         `<td class="${s.winner === 2 ? 'box-score-win' : 'box-score-lose'}">${s.team2Score}</td>`).join('');
+
+    // v4.21 Task 9: per-set durations as a footer row, aligned to the set columns. The whole
+    // row is omitted when no set carries timestamps (legacy saves); an individual set missing
+    // them renders an em dash. The Sets column has no meaningful total here — match duration
+    // already has its own Match Story card — so it stays a dash.
+    const durations = sets.map(s => formatSetDuration(s.startedAt, s.endedAt));
+    const durationFoot = durations.some(d => d != null) ? `
+                <tfoot>
+                    <tr>
+                        <td class="box-score-name">Duration</td>
+                        ${durations.map(d => `<td>${d != null ? escapeHtml(d) : '&mdash;'}</td>`).join('')}
+                        <td class="box-score-sets-col">&mdash;</td>
+                    </tr>
+                </tfoot>` : '';
 
     return `
         <div class="box-score-wrap">
@@ -2371,7 +2758,7 @@ function buildBoxScoreTable(team1Color, team2Color) {
                         ${team2Cells}
                         <td class="box-score-sets-col ${!t1Wins ? 'box-score-win' : 'box-score-lose'}">${state.team2Sets}</td>
                     </tr>
-                </tbody>
+                </tbody>${durationFoot}
             </table>
         </div>
     `;
@@ -2484,6 +2871,18 @@ function formatMatchDuration(sec) {
     // floor, not round: rounding carries 3590s to "60m" and 7175s to "1h 60m".
     const m = Math.floor((sec % 3600) / 60);
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// v4.21 Task 9: a single set's duration from its setHistory timestamps. Returns null when
+// either stamp is missing (any set played before v4.21, i.e. a migrated schema-3 save), which
+// is the signal the box score uses to hide the cell — and the whole row when no set has one.
+// Sub-minute sets read in seconds; formatMatchDuration would render a 40-second test set "0m".
+function formatSetDuration(startedAt, endedAt) {
+    if (startedAt == null || endedAt == null) return null;
+    const ms = endedAt - startedAt;
+    if (!(ms >= 0)) return null;  // negative (clock moved) or NaN — not >0, so a 0ms set reads "0s"
+    const sec = Math.round(ms / 1000);
+    return sec < 60 ? `${sec}s` : formatMatchDuration(sec);
 }
 
 // Side name (1/2) for card details — indexes the CURRENT team1Name/team2Name, which is
@@ -2722,6 +3121,11 @@ function undoLastPoint() {
     state.team2Rotation = lastState.team2Rotation;
     state.team1Subs = lastState.team1Subs;
     state.team2Subs = lastState.team2Subs;
+    // Array.isArray guards a snapshot pushed before v4.21 (migrate() seeds those, so this is
+    // belt-and-braces); undefined here would leave the pair log unusable until the next reset.
+    state.team1SubPairs = Array.isArray(lastState.team1SubPairs) ? lastState.team1SubPairs : [];
+    state.team2SubPairs = Array.isArray(lastState.team2SubPairs) ? lastState.team2SubPairs : [];
+    state.currentSetStartedAt = lastState.currentSetStartedAt ?? null;
     state.team1LiberoIn = lastState.team1LiberoIn;
     state.team2LiberoIn = lastState.team2LiberoIn;
     state.matchOver = false;

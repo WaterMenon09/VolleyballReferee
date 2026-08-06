@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.21 — 2026-08-06
+
+Substitutions now follow the FIVB rulebook. A starter and their substitute are locked to each other for the rest of the set, so a player can no longer be walked around the court by subbing out and back in somewhere else — the loophole that quietly defeated the rotation rule the scoresheet exists to enforce.
+
+### Added
+- **Substitution position lock (FIVB 15.6.2 / 15.6.3)** — when two players substitute against each other they become a pair for the set: the starter may only come back in place of their own substitute, and that substitute may only ever be replaced by that same starter. Illegal options are greyed out in the substitution list with the reason stated on screen, citing the rule, rather than failing silently when tapped
+- **Substitutions per team per set** — a new match rule in Settings. Empty means unlimited, which stays the default, so nothing changes unless you set a number; the field suggests 6 for FIVB indoor. `0` is a real setting meaning no substitutions at all. The substitution dialog shows how many of the allowance you've used. Note this counts *entries onto the court*, per 15.6.1 — a starter going off and coming back consumes two
+- **Per-set durations** on the result screen — the box score gains a duration row beneath the set scores. Sets under a minute read in seconds. Matches recorded before this release simply omit the row rather than showing blanks
+- **Per-screen analytics** — the app is a single page, so all four screens previously reported as one, making it impossible to see which screen people actually use or how long they spend there. Each screen now reports itself. No personal data is collected: screen names and counts only, never team or player names
+
+### Fixed
+- **Reloading between sets rendered the entire match-setup form above the rotation screen**, pushing the real screen roughly 1400px below the fold — it read as though the app had thrown the match away. The set-2-onward rotation path was the only one that never hid the setup screen. This had been shipping since before v4.20; found while verifying this release
+- Taking the libero off court no longer counts as a substitution — it never was one under FIVB 19, but it would have consumed the new per-set allowance and filed a bogus pairing
+- A bench player could be substituted directly into the slot the libero was covering. That is not a legal single step (the libero comes off first, then you substitute), and doing it recorded the *libero* as the starter of the pair, permanently locking the covered player out of the set with a message quoting the wrong shirt number
+
+### Internal
+- Substitution legality is tracked by **player pairing, not court position** — `state.team{1,2}SubPairs` holds `{starter, sub, returned}` records keyed by shirt number. Position keys are remapped by `rotateTeam()` on every side-out, so anything position-keyed cannot survive a set. One structure serves both readers: the pair lock and the allowance counter
+- `STORAGE_SCHEMA` 3 → 4, with a real migration. In-progress matches saved under v4.20 restore intact; the new fields are seeded into live state **and** into every undo snapshot already on the stack, so undoing back past the upgrade still works
+- New pure helpers `substitutionBlockReason()`, `subEntriesUsed()`, `isLiberoReturn()`, `liberoSlotBlockReason()`; enforcement is defence-in-depth, gating the UI *and* guarding `makeSubstitution()`, the same shape as the v4.11 libero fix
+- Virtual page views via `trackScreen()`, with `send_page_view: false` on the GA4 config. `sw.js` v4.2.1 — the bump is load-bearing here, not housekeeping: `index.html` is served network-first while `app.js` is cache-first, so shipping them apart would leave returning clients running new markup against a stale script
+- Four unused image assets deleted (~1.5 MB of dead repo weight, none of them referenced or precached)
+
 ## v4.20 — 2026-08-05
 
 Match result screen rebuilt as a post-match broadcast graphic. Every new number is computed from data the app already stored — no new tracking, no schema change.
