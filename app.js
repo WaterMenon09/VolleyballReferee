@@ -117,7 +117,7 @@ const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.23';
+const APP_VERSION = 'v4.24';
 
 // ── Changelog (homepage "What's New" modal) ────────────────────────────────
 // User-facing rewrite of CHANGELOG.md, not a copy of it — the file is developer-toned (internal
@@ -125,6 +125,16 @@ const APP_VERSION = 'v4.23';
 // fetch('./CHANGELOG.md'): fetching would need the raw file added to sw.js's APP_SHELL to work
 // offline, for text nobody but a developer would want to read anyway.
 const CHANGELOG_ENTRIES = [
+    {
+        version: 'v4.24',
+        date: 'Aug 10, 2026',
+        changes: [
+            'Every pop-up can now be used from a keyboard. Tab stays inside the open dialog instead of wandering onto the buttons behind it, and Escape closes most of them.',
+            'Escape always means "cancel" — it will never confirm something for you. The Switch Sides notice and the Set Break timer ignore Escape entirely, since their button is the only way forward.',
+            'The What\'s New and Match History panels no longer hide their own Close button on a phone held sideways.',
+            'Screen readers now announce each pop-up and its title when it opens.'
+        ]
+    },
     {
         version: 'v4.23',
         date: 'Aug 10, 2026',
@@ -1098,6 +1108,15 @@ function init() {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && matchIsLive()) acquireWakeLock();
     });
+
+    // Modal accessibility: focus trap + Escape + invoker-restore (Batch E / Task 4). Must be
+    // registered BEFORE restoreSavedMatch() below — that call can itself open
+    // #deciderSwitchModal (a reload landing mid-decider-set, past the side-switch score) with no
+    // preceding user gesture, and the MutationObserver has to already be attached to catch it.
+    document.addEventListener('pointerdown', stashModalInvoker, true);
+    document.addEventListener('keydown', stashModalInvoker, true);
+    document.addEventListener('keydown', handleModalKeydown, true);
+    MODAL_IDS.forEach(id => observeModalVisibility(document.getElementById(id)));
 
     restoreSavedMatch();
 
@@ -2139,6 +2158,222 @@ function shakeModal(contentEl) {
     vibrateInterval = setInterval(pulse, 1500);
 }
 
+// ── Modal accessibility: focus trap, Escape, invoker-restore (Batch E / Task 4) ────────────
+// One shared utility for all ten modals rather than ten copies. Built on a MutationObserver
+// watching each modal's `class` attribute, NOT on edits inside the ten open/close functions —
+// confirmReturnToSetup() hides #setBreakModal and #deciderSwitchModal by calling
+// classList.add('hidden') DIRECTLY, bypassing their close functions on purpose (calling
+// closeDeciderSwitchModal() there would trigger swapTeams()). A trap torn down inside close
+// functions would leak on exactly that path; an observer on the class attribute catches every
+// hide path for free and keeps this change additive rather than a refactor of match-flow code.
+
+const MODAL_IDS = ['subModal', 'timeoutModal', 'setBreakModal', 'deciderSwitchModal',
+    'returnToSetupModal', 'serveSwitchModal', 'historyModal', 'changelogModal',
+    'settingsModal', 'feedbackModal'];
+
+// Escape policy. Invokes the existing close FUNCTION, never the `hidden` class directly —
+// #timeoutModal and #setBreakModal own live intervals and a repeating vibration, and bypassing
+// their close functions would leave the device vibrating and the interval running silently.
+//
+// Two modals are deliberately absent below. Do not "complete" this table:
+//   - #setBreakModal: closeSetBreakModal() branches into showNewSetRotationSetup(), a full
+//     screen transition. Escape triggering screen navigation is a behaviour change, not an a11y
+//     fix, and this modal opens with no user gesture (an automatic timer). #continueSetBreak
+//     stays the only way through.
+//   - #deciderSwitchModal: its only close function (closeDeciderSwitchModal) sets
+//     state.deciderSideSwitched = true and calls swapTeams(). Wiring Escape to it would let a
+//     stray keypress silently perform the court switch. It is confirm-only, with no cancel path.
+// Escape must never reach a confirm action — #returnToSetupModal and #serveSwitchModal map to
+// their CANCEL functions only, never confirmReturnToSetup() / confirmServeSwitch().
+const MODAL_ESCAPE_CLOSERS = {
+    subModal: closeSubModal,
+    timeoutModal: closeTimeoutModal,
+    returnToSetupModal: closeReturnToSetupModal,
+    serveSwitchModal: closeServeSwitchModal,
+    historyModal: closeHistoryModal,
+    changelogModal: closeChangelogModal,
+    settingsModal: closeSettingsModal,
+    feedbackModal: closeFeedbackModal
+};
+
+// Elements a Tab press should be able to reach inside the currently-open modal.
+// The `[tabindex]:not([tabindex="-1"])` clause below is NOT sufficient on its own to exclude
+// negative-tabindex elements: the earlier type clauses match independently, so an <input> or
+// <button> carrying tabindex="-1" is still selected by them. #feedbackBotcheck is exactly that —
+// a spam honeypot (<input type="checkbox" tabindex="-1">) parked off-screen at left:-9999px with
+// real 13x13 layout, so neither the selector nor the getClientRects() filter drops it. The
+// explicit el.tabIndex < 0 filter in getModalFocusables() is what actually removes it, and the
+// .modal-content container along with it. Do not drop that filter on the belief that this
+// selector already covers it — verified in-browser 10-Aug-2026.
+const MODAL_FOCUSABLE_SELECTOR = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled]):not([type="hidden"])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
+// Recomputed on every Tab press (see trapModalTab) rather than cached at open time — #setKeepAwake
+// (disabled when 'wakeLock' in navigator is false) and #submitFeedback (disabled while offline or
+// mid-submit) toggle `disabled` while their modal is open, and a cached list would land focus on a
+// now-disabled control.
+function getModalFocusables(modalEl) {
+    const nodes = Array.from(modalEl.querySelectorAll(MODAL_FOCUSABLE_SELECTOR))
+        .filter(el => el.tabIndex >= 0 && el.getClientRects().length > 0);
+
+    // Collapse each radio group (#feedbackModal's feedbackCategory) to ONE tab stop — the checked
+    // radio, or the first in DOM order if none is checked — matching native browser behaviour.
+    // Getting this wrong breaks Shift+Tab wrap-around (the group would occupy N stops, not 1).
+    const seenGroups = new Set();
+    const stops = [];
+    for (const el of nodes) {
+        if (el.tagName === 'INPUT' && el.type === 'radio' && el.name) {
+            if (seenGroups.has(el.name)) continue;
+            seenGroups.add(el.name);
+            const group = nodes.filter(o => o.tagName === 'INPUT' && o.type === 'radio' && o.name === el.name);
+            stops.push(group.find(o => o.checked) || group[0]);
+        } else {
+            stops.push(el);
+        }
+    }
+    return stops;
+}
+
+// Guards for focus restore on modal close. A stashed/observer-time invoker can be stale in ways
+// that would otherwise strand focus on <body>: the element can vanish (#subModal rebuilds
+// #subOptions on every open), sit under a `.hidden` ancestor (#changelogBtn/#historyBtn/
+// #returnToSetup are hidden on other screens, or after confirmReturnToSetup() tears down the
+// scoreboard), or be hidden via inline style.display rather than the `.hidden` class — which is
+// exactly how #changelogBtn/#historyBtn hide themselves, so getClientRects() is load-bearing
+// here and not merely a belt-and-suspenders check.
+function isRestorableFocusTarget(el) {
+    if (!el || el === document.body || el === document.documentElement) return false;
+    if (el.disabled) return false;
+    if (!document.contains(el)) return false;
+    if (el.closest('.hidden')) return false;
+    return el.getClientRects().length > 0;
+}
+
+// Invoker capture. Reading document.activeElement AT OBSERVER TIME is unreliable — Safari does
+// not focus a clicked <button>, and by the time the class mutation is observed several other
+// things may have happened. Instead, remember the last plausible invoker AS IT HAPPENS via
+// pointerdown/keydown, and let the "open" transition consume it. `.rotation-pos` (the #subModal
+// invokers) are plain non-focusable <div>s, included anyway so a rotation click still overwrites
+// this stash with something — calling .focus() on a div with no tabindex is a benign no-op later,
+// which is exactly the "do nothing" outcome isRestorableFocusTarget()/onModalClose() want, rather
+// than silently reusing a stale button from minutes earlier. `_lastModalInvoker` is a single slot,
+// not per-modal: it always holds the most recent candidate, which is what the very next
+// modal-open transition should attribute itself to.
+const MODAL_INVOKER_SELECTOR = 'a[href], button, input, select, textarea, [tabindex], .rotation-pos';
+let _lastModalInvoker = null;
+
+function stashModalInvoker(e) {
+    if (!e.target || !e.target.closest) return;
+    const el = e.target.closest(MODAL_INVOKER_SELECTOR);
+    if (el && !el.closest('.modal')) _lastModalInvoker = el;
+}
+
+const _modalInvokerFor = new Map(); // modalId -> element to refocus when that modal closes
+
+// Watches ONE modal's `class` attribute. attributeOldValue lets the callback compare the NET
+// transition across the whole batch (mutations[0].oldValue, the true "before") against the live
+// class (the true "after") rather than trusting any single record — classList.add('hidden') on an
+// already-hidden element still queues a real mutation record, so a [close, redundant re-hide]
+// batch on one modal would otherwise read as "no change" off the last record alone and silently
+// swallow the close (no focus restore, a leaked _modalInvokerFor entry). Comparing the batch's
+// net effect instead means only a genuine hidden<->visible transition ever fires open/close.
+function observeModalVisibility(modalEl) {
+    // Guard a missing element rather than throwing: this runs in init() BEFORE restoreSavedMatch()
+    // and trackVisibleScreen(), so a TypeError here (e.g. after a future modal id rename) would
+    // take out in-flight match restore and every pageview, leaving the user on a blank-ish #setup.
+    if (!modalEl) return;
+
+    const observer = new MutationObserver(mutations => {
+        const wasHidden = (mutations[0].oldValue || '').split(/\s+/).includes('hidden');
+        const isHidden = modalEl.classList.contains('hidden');
+        if (wasHidden === isHidden) return;
+        if (wasHidden) onModalOpen(modalEl);
+        else onModalClose(modalEl);
+    });
+    observer.observe(modalEl, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+}
+
+function onModalOpen(modalEl) {
+    _modalInvokerFor.set(modalEl.id, _lastModalInvoker || document.activeElement);
+    _lastModalInvoker = null;
+
+    // Focus the container, not the first control — lets a screen reader announce the dialog's
+    // aria-labelledby title, rather than the jarring result of pre-focusing a "Close"/"Cancel"
+    // button. Tab then moves to the first real control (see trapModalTab).
+    const contentEl = modalEl.querySelector('.modal-content');
+    if (contentEl) contentEl.focus();
+}
+
+function onModalClose(modalEl) {
+    const invoker = _modalInvokerFor.get(modalEl.id) || null;
+    _modalInvokerFor.delete(modalEl.id);
+    if (isRestorableFocusTarget(invoker)) invoker.focus();
+    // else: leave focus wherever the browser already put it. Never force it onto <body> — several
+    // invokers legitimately have nowhere valid to return to (see isRestorableFocusTarget above),
+    // e.g. #timeoutModal fired by a technical timeout, #setBreakModal (always automatic), and
+    // #deciderSwitchModal (can open at page load from restoreSavedMatch(), with no user gesture).
+}
+
+// Cycles Tab/Shift+Tab within the currently-open modal. Only the boundary transitions need
+// explicit handling — modal children are DOM-contiguous, so an un-intercepted Tab from the
+// middle of the list already lands correctly on the next/previous stop without help.
+function trapModalTab(e, modalEl) {
+    const contentEl = modalEl.querySelector('.modal-content');
+    const stops = getModalFocusables(modalEl);
+
+    if (stops.length === 0) {
+        e.preventDefault();
+        if (contentEl) contentEl.focus();
+        return;
+    }
+
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+    const active = document.activeElement;
+    const onContainer = active === contentEl;
+    const index = stops.indexOf(active);
+
+    if (e.shiftKey) {
+        if (onContainer || index <= 0) {
+            e.preventDefault();
+            last.focus();
+        }
+    } else if (onContainer || index === -1 || index === stops.length - 1) {
+        e.preventDefault();
+        first.focus();
+    }
+}
+
+// Single document-level keydown listener (capture phase) covering Escape + Tab for whichever
+// modal is currently visible. No collision with the app's other two keydown listeners: the
+// #serveIndicator Enter/Space handler ignores everything but Enter/Space, and the SoundFX unlock
+// listener is `{ once: true, passive: true }` and self-removes after the first keypress.
+function handleModalKeydown(e) {
+    // An IME composition swallows its own Escape (used to cancel the candidate list). Without this
+    // guard, cancelling a composition in #feedbackMessage would close the modal instead.
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key !== 'Escape' && e.key !== 'Tab') return;
+    const modals = document.querySelectorAll('.modal:not(.hidden)');
+    if (modals.length === 0) return;
+    const modalEl = modals[modals.length - 1]; // last in DOM order, if more than one is ever visible
+
+    if (e.key === 'Escape') {
+        const closeFn = MODAL_ESCAPE_CLOSERS[modalEl.id];
+        if (closeFn) {
+            e.preventDefault();
+            closeFn();
+        }
+        return;
+    }
+
+    trapModalTab(e, modalEl);
+}
 
 function showRotationSetup() {
     document.getElementById('setup').classList.add('hidden');

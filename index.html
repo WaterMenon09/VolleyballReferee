@@ -305,8 +305,8 @@
     </div>
 
     <div id="subModal" class="modal hidden">
-        <div class="modal-content sub-modal-content">
-            <h2>Substitute Player</h2>
+        <div class="modal-content sub-modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="subModalTitle">
+            <h2 id="subModalTitle">Substitute Player</h2>
             <p id="subCurrentPlayer"></p>
             <p id="subRuleNote" class="sub-rule-note hidden" role="status"></p>
             <div class="sub-options" id="subOptions"></div>
@@ -315,7 +315,7 @@
     </div>
 
     <div id="timeoutModal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="timeoutTeamName">
             <h2 id="timeoutTeamName">Team Timeout</h2>
             <div class="timer-display">
                 <svg class="timer-ring" viewBox="0 0 100 100">
@@ -329,7 +329,7 @@
     </div>
 
     <div id="setBreakModal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="setBreakTitle">
             <h2 id="setBreakTitle">Set Break</h2>
             <div class="timer-display">
                 <svg class="timer-ring" viewBox="0 0 100 100">
@@ -343,9 +343,9 @@
     </div>
 
     <div id="deciderSwitchModal" class="modal hidden">
-        <div class="modal-content decider-switch-content">
+        <div class="modal-content decider-switch-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="deciderSwitchModalTitle">
             <div class="decider-switch-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></div>
-            <h2>Switch Sides</h2>
+            <h2 id="deciderSwitchModalTitle">Switch Sides</h2>
             <p class="decider-switch-subtitle">A team has reached 8 points in the deciding set.</p>
             <p class="decider-switch-rule">FIVB Rule: teams change courts at 8 points in the final set.</p>
             <div class="decider-switch-score" id="deciderSwitchScore"></div>
@@ -354,9 +354,9 @@
     </div>
 
     <div id="returnToSetupModal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="returnToSetupModalTitle">
             <div class="confirm-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></div>
-            <h2>Return to Setup?</h2>
+            <h2 id="returnToSetupModalTitle">Return to Setup?</h2>
             <p class="confirm-subtitle">The current match will be cancelled.</p>
             <div class="confirm-score-summary" id="returnToSetupScoreSummary"></div>
             <div class="confirm-buttons">
@@ -367,9 +367,9 @@
     </div>
 
     <div id="serveSwitchModal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="serveSwitchModalTitle">
             <div class="confirm-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2c3 4.5 3 15.5 0 20"/><path d="M2.5 9c5 2.5 14 2.5 19 0"/><path d="M3.5 17c4.5-3.5 12.5-3.5 17 0"/></svg></div>
-            <h2>Switch serving team?</h2>
+            <h2 id="serveSwitchModalTitle">Switch serving team?</h2>
             <p class="confirm-subtitle">Serve already follows the score automatically. Switch the serving team anyway?</p>
             <div class="confirm-buttons">
                 <button class="btn btn-secondary" id="cancelServeSwitch">Cancel</button>
@@ -379,24 +379,27 @@
     </div>
 
     <div id="historyModal" class="modal hidden">
-        <div class="modal-content history-modal-content">
-            <h2>Match History</h2>
-            <div id="historyList" class="history-list"></div>
+        <div class="modal-content history-modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
+            <h2 id="historyModalTitle">Match History</h2>
+            <!-- tabindex="0" makes this scroller keyboard-reachable; role+label stop it being an
+                 unnamed tab stop that a screen reader announces as a bare "group". -->
+            <div id="historyList" class="history-list" tabindex="0" role="region" aria-labelledby="historyModalTitle"></div>
             <button class="btn btn-secondary" id="closeHistory">Close</button>
         </div>
     </div>
 
     <div id="changelogModal" class="modal hidden">
-        <div class="modal-content changelog-modal-content">
-            <h2>What's New</h2>
-            <div id="changelogList" class="changelog-list"></div>
+        <div class="modal-content changelog-modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="changelogModalTitle">
+            <h2 id="changelogModalTitle">What's New</h2>
+            <!-- See #historyList above: tabindex makes it reachable, role+label make it named. -->
+            <div id="changelogList" class="changelog-list" tabindex="0" role="region" aria-labelledby="changelogModalTitle"></div>
             <button class="btn btn-secondary" id="closeChangelog">Close</button>
         </div>
     </div>
 
     <div id="settingsModal" class="modal hidden">
-        <div class="modal-content settings-modal-content">
-            <h2>Settings</h2>
+        <div class="modal-content settings-modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+            <h2 id="settingsModalTitle">Settings</h2>
 
             <div class="settings-scroll">
                 <h3 class="settings-section">Match Rules</h3>
@@ -447,13 +450,17 @@
     </div>
 
     <div id="feedbackModal" class="modal hidden">
-      <div class="modal-content feedback-modal-content">
-        <h2>Send Feedback</h2>
+      <div class="modal-content feedback-modal-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle">
+        <h2 id="feedbackModalTitle">Send Feedback</h2>
         <form id="feedbackForm" novalidate>
           <div class="feedback-scroll">
             <div class="feedback-field">
               <span class="feedback-label">Category</span>
               <div class="radio-group segmented">
+                <!-- Keep `checked`: getModalFocusables() collapses this radio group to one tab stop
+                     via `group.find(o => o.checked) || group[0]`. With nothing checked, Shift+Tab
+                     into the group focuses the LAST radio while the stop list holds the FIRST, so
+                     indexOf() returns -1 and the next Tab yanks focus back to the top of the modal. -->
                 <label><input type="radio" name="feedbackCategory" value="bug" checked> Bug</label>
                 <label><input type="radio" name="feedbackCategory" value="suggestion"> Suggestion</label>
                 <label><input type="radio" name="feedbackCategory" value="other"> Other</label>
@@ -479,7 +486,7 @@
       </div>
     </div>
 
-    <footer class="credits">v4.23 | Created by Menon Pranto</footer>
+    <footer class="credits">v4.24 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
     <script>

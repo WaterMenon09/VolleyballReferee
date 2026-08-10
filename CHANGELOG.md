@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.24 — 2026-08-10
+
+Every dialog in the app becomes properly keyboard- and screen-reader-usable. Until now no modal trapped focus, so a keyboard user could Tab straight out of an open dialog and reach the controls behind it — including the scoring buttons sitting behind a confirmation prompt. The v4.20 review demonstrated the consequence: with the serve-switch confirmation open, you could Tab behind it, score the set-winning point, then confirm, and the side switch would apply to the *next* set. This release closes that for all ten modals at once, as a single shared mechanism rather than ten patched copies.
+
+### Added
+- **Focus is trapped inside the open dialog.** Tab and Shift+Tab now cycle within the modal and wrap at the ends; the controls behind it are unreachable until it closes. Verified against the v4.20 exploit above — it no longer reproduces.
+- **Escape closes most dialogs**, and always means *cancel*, never *confirm*. On the "Return to setup?" and "Switch serving team?" prompts it takes the cancel branch. **Two dialogs deliberately ignore Escape:** the deciding-set **Switch Sides** notice, whose only action performs the court switch, and the **Set Break** timer, whose only action advances the match to the next set. Neither has a cancel path, so a stray keypress must not be able to trigger them — their buttons stay the only way through.
+- **Dialogs announce themselves to screen readers** — each carries a dialog role, a modal flag, and a title reference, and focus moves onto the dialog when it opens so its heading is read out. Focus returns to the control that opened it on close.
+- **The match-history and What's-new lists are keyboard-scrollable.** Both were scrollable regions that keyboard users could not reach at all; each is now a labelled, focusable region.
+
+### Fixed
+- **The What's-new and match-history dialogs could hide their own Close button.** Each had a scrolling list inside an already-scrolling box, so on a short screen — a phone held in landscape, most obviously — reaching Close required scrolling the outer box after the inner list had bottomed out. Both now use the same single-scroll layout the Settings dialog already used; the Close button stays put and visible at every supported size.
+- **The feedback form's hidden spam trap could receive keyboard focus.** It is parked off-screen, so focus would have vanished with no visible cursor, and anything typed into it would have made a genuine submission look like spam and be silently discarded behind a success message. It is now excluded from the tab order.
+
+### Internal
+- The trap is driven by a `MutationObserver` on each modal's `class` attribute rather than by edits inside the ten open/close functions. `confirmReturnToSetup()` force-hides `#setBreakModal` and `#deciderSwitchModal` directly, deliberately bypassing their close functions (calling `closeDeciderSwitchModal()` there would fire `swapTeams()`), so teardown wired into close functions would leak on exactly those paths. Observing the class attribute catches every hide path and keeps the change additive — no match-flow code was restructured.
+- Escape routes through the existing close functions, never the `hidden` class, because `#timeoutModal` and `#setBreakModal` own live intervals and a repeating vibration that only those functions clear.
+- The focusable-element scan is recomputed on every Tab press, since `#setKeepAwake` and `#submitFeedback` toggle `disabled` while their dialog is open, and it collapses each radio group to a single stop to match native behaviour.
+- No change to scoring, rotation, substitution, or persistence logic. `STORAGE_SCHEMA` stays at **4** — no state shape changed, so there is no migration.
+
 ## v4.23 — 2026-08-10
 
 The app is renamed from **Volleyball Referee** to **SpikeSheet**. The old name is a category label rather than a mark, which put it inside a crowded cluster of identically-named volleyball scoring apps and caused an app store rejection. Stores reject on confusing similarity, not exact match, so a similarly descriptive replacement would have failed the same way — the new name is distinctive, and the descriptive keywords move to the store listing fields where they belong.

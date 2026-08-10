@@ -2794,24 +2794,33 @@ textarea:focus-visible,
 .history-modal-content {
     text-align: left;
     max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .history-modal-content h2 {
     text-align: left;
 }
 
+/* Inner scroll region — same idiom as .settings-scroll (see its comment below): drops the old
+   max-height:60vh, which could sum past the outer box's min(86vh,86dvh) cap in short landscape
+   and strand the Close button below an unreachable scroll. The ink-overflow cushion (padding +
+   negative margin) gives focus rings on entries room before this box's own overflow:hidden clip. */
 .history-list {
-    max-height: 60vh;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    margin-bottom: 24px;
+    padding: 0 var(--sp-2);
+    margin: 0 calc(-1 * var(--sp-2)) 24px;
     scrollbar-width: thin;
-    scrollbar-color: rgba(245, 200, 66, 0.3) transparent;
+    scrollbar-color: rgba(var(--gold-rgb), 0.3) transparent;
 }
 
 .history-list::-webkit-scrollbar { width: 4px; }
 .history-list::-webkit-scrollbar-track { background: transparent; }
 .history-list::-webkit-scrollbar-thumb {
-    background: rgba(245, 200, 66, 0.3);
+    background: rgba(var(--gold-rgb), 0.3);
     border-radius: 2px;
 }
 
@@ -2893,16 +2902,22 @@ textarea:focus-visible,
 .changelog-modal-content {
     text-align: left;
     max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .changelog-modal-content h2 {
     text-align: left;
 }
 
+/* Inner scroll region — see the comment on .history-list; same fix, same idiom. */
 .changelog-list {
-    max-height: 60vh;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    margin-bottom: var(--sp-5);
+    padding: 0 var(--sp-2);
+    margin: 0 calc(-1 * var(--sp-2)) var(--sp-5);
     scrollbar-width: thin;
     scrollbar-color: rgba(var(--gold-rgb), 0.3) transparent;
 }
@@ -3272,6 +3287,24 @@ textarea:focus-visible,
 
 .sub-rule-note.at-limit {
     color: var(--error-text);
+}
+
+/* ── Modal focus accessibility (Batch E / Task 4) ───────────────────────────
+   .modal-content is focused programmatically on open (app.js onModalOpen()) so a screen reader
+   announces the dialog's aria-labelledby title instead of landing on a "Close"/"Cancel" button.
+   A keyboard user never Tabs TO the container itself, so give it no visible ring — one would only
+   ever flash at open with no interaction behind it, reading as an unexplained error state.
+   #changelogList / #historyList are real Tab stops (tabindex="0", added so keyboard users can
+   scroll them) and DO want the on-theme ring used elsewhere in the focus-visible block above. */
+.modal-content:focus,
+.modal-content:focus-visible {
+    outline: none;
+}
+
+.changelog-list:focus-visible,
+.history-list:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
 }
 
 /* ── Reduced motion — MUST be last rule block (cascade wins over everything) ── */

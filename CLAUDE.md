@@ -128,6 +128,53 @@ Enforcement is defence-in-depth, same shape as the v4.11 libero fix: `showSubMod
 - **The libero is outside this system entirely.** FIVB 19 replacements are not substitutions: they create no pair and never consume the cap. Two helpers keep it that way — `isLiberoReturn()` (the libero going back off arrives at `makeSubstitution()` with `isLibero === false`, via the "Return original player" chip) and `liberoSlotBlockReason()` (a bench player may not be substituted straight into a libero-covered slot; the libero comes off first). Without the latter, `recordSubstitution()` reads the slot's occupant as the "starter" and files a pair naming the *libero*, locking the covered player out of the set.
 - `substitutionsPerSet` is a **match rule**: `null` = unlimited, `0` = a literal "none permitted". Never `Infinity` — `JSON.stringify(Infinity)` is `null`, so it cannot round-trip. Read it only through `getRules()`; `NULLABLE_SETTINGS` exists because `onSettingChange()`'s `parseInt('')` → `NaN` would otherwise revert an intentionally cleared field.
 
+### Modal focus trap and dialog a11y (v4.24)
+
+All ten modals share one focus-trap mechanism in `app.js`. It is driven by a **`MutationObserver` on
+each modal's `class` attribute** — `observeModalVisibility()`, registered in `init()` — **not** by
+setup/teardown calls inside the ten open/close functions.
+
+**Why the observer, and why it must stay one:** `confirmReturnToSetup()` force-hides `#setBreakModal`
+and `#deciderSwitchModal` with `classList.add('hidden')` directly, deliberately bypassing their close
+functions (calling `closeDeciderSwitchModal()` there would fire `swapTeams()`). Teardown wired into
+close functions leaks on exactly those paths. Observing the class attribute catches every hide path
+and keeps the whole feature additive — no match-flow code was restructured to get it.
+
+The observer compares the **net transition across the mutation batch** (`mutations[0].oldValue` vs the
+live `classList`), so a redundant re-hide of an already-hidden modal cannot fire a phantom close.
+
+**The Escape table (`MODAL_ESCAPE_CLOSERS`) has two deliberate omissions. Do not "complete" it:**
+
+- **`#deciderSwitchModal`** — its only close function sets `state.deciderSideSwitched = true` and calls
+  `swapTeams()`. It is a confirm-only acknowledgement with no cancel path, so Escape would let a stray
+  keypress silently perform the court switch.
+- **`#setBreakModal`** — `closeSetBreakModal()` branches into `showNewSetRotationSetup()`, a full screen
+  transition. Escape as screen navigation is a behaviour change, not an a11y fix, and this modal opens
+  with no user gesture.
+
+Escape entries always map to the **cancel** function, never a confirm, and always route through the
+existing close function rather than the `hidden` class — `#timeoutModal`/`#setBreakModal` own live
+intervals and a repeating vibration that only those functions clear.
+
+**Maintenance traps:**
+
+- **`getModalFocusables()` must keep its explicit `el.tabIndex >= 0` filter.** The
+  `[tabindex]:not([tabindex="-1"])` clause in `MODAL_FOCUSABLE_SELECTOR` does **not** exclude
+  negative-tabindex elements on its own, because the earlier type clauses match them independently.
+  `#feedbackBotcheck` is a spam honeypot (`<input type="checkbox" tabindex="-1">` at `left:-9999px`
+  with real 13×13 layout), so neither the selector nor the `getClientRects()` filter drops it. A
+  focusable honeypot sends focus off-screen and, once typed into, makes `submitFeedback()` discard
+  genuine feedback as spam behind a fake success.
+- **The focusable list is recomputed on every Tab press, never cached** — `#setKeepAwake` and
+  `#submitFeedback` toggle `disabled` while their modal is open.
+- **Keep `checked` on the first `feedbackCategory` radio.** The group collapses to one tab stop via
+  `group.find(o => o.checked) || group[0]`; with nothing checked, Shift+Tab focuses the last radio
+  while the stop list holds the first, and the next Tab yanks focus back to the top of the modal.
+- `role="dialog"` / `aria-modal="true"` / `aria-labelledby` live on **`.modal-content`** (the element
+  that takes focus), not the `.modal` backdrop. The four backdrop-dismiss handlers compare
+  `e.target === <wrapper>`, so the wrapper must keep its identity — do not move those attributes back.
+- A grep for `role="dialog"` and for `aria-modal` must each return exactly **10**.
+
 ### In-app changelog (v4.22)
 
 `#changelogModal` renders `CHANGELOG_ENTRIES`, an array in `app.js`. It deliberately does **not** `fetch('./CHANGELOG.md')` — that file is developer-toned, and fetching it would need adding to `APP_SHELL` in `sw.js` to survive offline.
