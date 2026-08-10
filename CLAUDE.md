@@ -12,6 +12,27 @@ open index.html
 
 Deployment is automated via GitHub Actions (`.github/workflows/deploy.yml`) — any push to `main` deploys to GitHub Pages.
 
+## Naming: the app is SpikeSheet, the repo is VolleyballReferee (v4.23)
+
+The app was renamed from "Volleyball Referee" to **SpikeSheet** in v4.23 after an app store
+rejection — the old name was a category label rather than a mark, colliding with a field of
+identically-named volleyball scoring apps. **The rename covered app identity only. The repo and the
+GitHub Pages URL deliberately did not move**, because moving them orphans every installed PWA at
+the old service-worker `scope`, breaks the absolute OG tags, and splits the analytics history.
+
+That split leaves three things looking wrong that are correct:
+
+- **`og:url`, `og:image`, and `twitter:image` in `index.html` still contain `/VolleyballReferee/`.**
+  This is deliberate. "Finishing the rename" by rewriting them produces a dead link and a broken
+  unfurl image. Same for every `github.com/watermenon09/VolleyballReferee` URL in the docs.
+- **Every `localStorage` key keeps its `vb-` prefix** — `vb-settings`, `vb-match-state`,
+  `vb-match-history`, `vb-team-colors`. Renaming one silently wipes users' in-flight matches,
+  history, settings, and colours. Never rebrand a storage key.
+- **The `vbref-` service worker cache prefix stays.** It is internal, and the cleanup in `sw.js`
+  filters on `k !== CACHE` rather than the prefix, so renaming it gains nothing.
+
+The full reasoning is in the v4.23 `CHANGELOG.md` entry.
+
 ## Architecture
 
 The app is a single-page vanilla JS application with three source files plus PWA support files:

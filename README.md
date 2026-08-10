@@ -1,6 +1,8 @@
-# Volleyball Referee
+# SpikeSheet
 
 A comprehensive web-based volleyball scoresheet application for tracking matches, rotations, substitutions, and more. Works seamlessly on desktop and mobile browsers.
+
+> Formerly released as "Volleyball Referee." The app was renamed in v4.23; the URL, your saved matches, and all settings are unchanged.
 
 ## Live Demo
 

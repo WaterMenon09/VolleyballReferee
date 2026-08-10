@@ -7,7 +7,7 @@
 @font-face { font-family: 'Saira Semi Condensed'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/body-700.woff2') format('woff2'); }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   VOLLEYBALL REFEREE  ·  Design System
+   SPIKESHEET  ·  Design System
    Theme: Indoor Court / Mikasa — Stadium Night
    ───────────────────────────────────────────────────────────────────────── */
 
@@ -160,20 +160,37 @@ body::after {
 .app-brand-mark { color: var(--gold); flex-shrink: 0; }
 .app-bar-actions { display: flex; gap: var(--sp-2); align-items: center; flex-shrink: 0; }
 
-/* v4.22 — the app bar gained a fourth button (#changelogBtn) and "VolleyballReferee" is a single
-   unbreakable word, so the brand's implicit `min-width: auto` floored it at 186px. Nothing could
+/* v4.22 — the app bar gained a fourth button (#changelogBtn) and the brand (then
+   "VolleyballReferee") is a single unbreakable word, so its implicit `min-width: auto` floored it
+   at 186px. v4.23's "SpikeSheet" is much shorter, but the constraint is unchanged — the brand is
+   still one unbreakable word, so keep these rules if it is ever renamed longer again. Nothing could
    give, and the actions block overflowed the bar's right edge on phones, shearing #historyBtn to a
    ~17px sliver at 375px. Because .app-bar is `position: fixed` this does NOT register as document
    horizontal scroll — a page-level overflow check passes it silently, so measure
    `.app-bar-actions` right edge against clientWidth instead.
    Two guards: the brand may now shrink rather than force overflow at ANY width (so adding a fifth
-   button degrades instead of breaking), and below 460px the wordmark is dropped entirely — the
-   volleyball mark still identifies the app, and a truncated wordmark reads as broken rather than
-   deliberate. .app-bar-actions never shrinks, so touch targets stay at 44px. */
+   button degrades instead of breaking), and below the breakpoint the wordmark is dropped entirely
+   — the volleyball mark still identifies the app, and a truncated wordmark reads as broken rather
+   than deliberate. .app-bar-actions never shrinks, so touch targets stay at 44px.
+
+   v4.23 — the 460px threshold was sized for the 18-character "VolleyballReferee". "SpikeSheet" is
+   10, so that breakpoint hid the wordmark on every phone, which defeats the point of a rename.
+   Measured with all four buttons visible (the worst case, once match history exists): at 375px the
+   wordmark renders complete — scrollWidth == clientWidth, no ellipsis — with 6px of clearance to
+   .app-bar-actions and no overflow. At 320px the gap closes to 0 and the brand starts compressing,
+   so the threshold sits at 360px: every common phone keeps the name, sub-360 falls back to the
+   mark. Re-measure this if the brand is renamed longer or a fifth button is added.
+
+   Known and accepted: 375px combined with >=110% browser text scaling ellipsizes the wordmark.
+   Text scaling grows fonts without changing viewport width, so no media query can catch it.
+   Measured to 200% — the bar never overflows (actions right edge stays 16px inside clientWidth at
+   every scale) and touch targets hold at 44px, so this degrades to a truncated wordmark, not a
+   broken layout. Raising the breakpoint to ~380px would fix it only by hiding the brand on
+   iPhone SE and mini at DEFAULT settings, which is the worse trade. */
 .app-brand { min-width: 0; }
 .app-brand span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-@media (max-width: 460px) {
+@media (max-width: 360px) {
     .app-brand span { display: none; }
 }
 
@@ -2755,8 +2772,15 @@ textarea:focus-visible,
 
 /* ── App bar action buttons ───────────────────────────────────────────────── */
 
+/* The font here is load-bearing, not cosmetic. #historyBtn is the only width-variable element in
+   .app-bar-actions, which is flex-shrink: 0 — so its label's width decides how much slack the
+   brand wordmark has. With no font declared it rendered in the UA default button font (the `*`
+   reset sets no font and there is no `button {}` rule), which differs per browser and platform, so
+   the 375px clearance measured in one engine would not hold in another. Pinning it makes that
+   measurement portable — and matches the app's typeface, which "History" previously did not. */
 .top-btn {
     min-width: 44px; min-height: 44px;
+    font: 600 0.78rem/1 var(--font-body);
     display: inline-flex; align-items: center; justify-content: center;
     background: var(--surface-1); border: 1px solid var(--stroke-1);
     border-radius: var(--r-pill); color: var(--ink-85); cursor: pointer;

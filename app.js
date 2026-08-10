@@ -117,7 +117,7 @@ const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.22';
+const APP_VERSION = 'v4.23';
 
 // ── Changelog (homepage "What's New" modal) ────────────────────────────────
 // User-facing rewrite of CHANGELOG.md, not a copy of it — the file is developer-toned (internal
@@ -125,6 +125,14 @@ const APP_VERSION = 'v4.22';
 // fetch('./CHANGELOG.md'): fetching would need the raw file added to sw.js's APP_SHELL to work
 // offline, for text nobody but a developer would want to read anyway.
 const CHANGELOG_ENTRIES = [
+    {
+        version: 'v4.23',
+        date: 'Aug 10, 2026',
+        changes: [
+            'The app is now called SpikeSheet. Same app, same address — only the name on the door changed.',
+            'Nothing else moved: a match in progress, your saved history, team colours, and settings all carry over untouched.'
+        ]
+    },
     {
         version: 'v4.22',
         date: 'Aug 7, 2026',
@@ -528,8 +536,8 @@ async function submitFeedback(e) {
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
                 access_key: WEB3FORMS_ACCESS_KEY,
-                subject: `[Volleyball Referee] ${category} feedback`,
-                from_name: 'Volleyball Referee PWA',
+                subject: `[SpikeSheet] ${category} feedback`,
+                from_name: 'SpikeSheet PWA',
                 category,
                 message,
                 email: email || undefined,
@@ -3142,7 +3150,7 @@ function buildResultSummary() {
     const sets = state.setHistory.map(s =>
         t1Won ? `${s.team1Score}-${s.team2Score}` : `${s.team2Score}-${s.team1Score}`).join(', ');
     const url = location.origin + location.pathname;
-    return `🏐 ${winner} def. ${loser} ${setsW}-${setsL} (${sets})\nScored with Volleyball Referee — ${url}`;
+    return `🏐 ${winner} def. ${loser} ${setsW}-${setsL} (${sets})\nScored with SpikeSheet — ${url}`;
 }
 
 async function shareResult() {

@@ -1,10 +1,33 @@
 # Changelog
 
-All notable changes to **Volleyball Referee** are documented in this file.
+All notable changes to **SpikeSheet** (released as "Volleyball Referee" through v4.22) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
+
+## v4.23 — 2026-08-10
+
+The app is renamed from **Volleyball Referee** to **SpikeSheet**. The old name is a category label rather than a mark, which put it inside a crowded cluster of identically-named volleyball scoring apps and caused an app store rejection. Stores reject on confusing similarity, not exact match, so a similarly descriptive replacement would have failed the same way — the new name is distinctive, and the descriptive keywords move to the store listing fields where they belong.
+
+### Changed
+- **App name is now SpikeSheet** — window title, app-bar brand, web manifest `name`/`short_name` (was `VB Ref`), Open Graph and Twitter card titles, feedback email subject, and the match-result share text. The name fields carry the **bare mark only**: a store's duplicate-name check reads `name` and `<title>`, so appending a category label there would partly re-create the collision this release exists to fix. Descriptive wording lives in `description` and the store listing fields
+- **Meta description rewritten** to lead with "Volleyball scoresheet tracker" and name rotations, substitutions, libero, timeouts, FIVB rules, and offline support, so the rename costs no search relevance
+
+### Fixed
+- **The app name is visible on phones again.** A `@media (max-width: 460px)` rule hid the app-bar wordmark because the old 18-character name could not fit beside four buttons. At 10 characters it fits, so the threshold dropped to 360px. Measured at 375px with all four buttons visible: the wordmark renders complete with 6px of clearance and no overflow
+- **`.top-btn` now declares a font.** It previously declared none, and since the `*` reset sets no font and there is no `button {}` rule, the History button's label rendered in the browser's default button font. That made it the one width-variable element in a `flex-shrink: 0` row, so the app bar's fit depended on which browser was rendering it. Pinned to the app's own typeface, which also fixes History being the only app-bar text in a foreign font
+- **The app-bar heading has an accessible name.** Below 360px the wordmark is hidden and the volleyball mark is `aria-hidden`, which left the `<h1>` with no name for screen readers. An `aria-label` closes it at every width
+- **iOS home-screen name pinned** via `apple-mobile-web-app-title`, for versions predating manifest `short_name` support
+
+Known and accepted: at 375px with browser text scaling at 110% or above, the wordmark ellipsizes. Text scaling grows fonts without changing viewport width, so no media query can detect it. Measured to 200% — the bar never overflows and touch targets hold at 44px, so it degrades to a truncated wordmark rather than a broken layout. Raising the breakpoint would fix it only by hiding the brand on iPhone SE and mini at default settings, which is the worse trade.
+
+### Internal
+- **The repository and GitHub Pages URL are deliberately unchanged.** Renaming them would move the Pages path, which orphans every installed PWA at the old service-worker `scope`, breaks the absolute `og:url`/`og:image` tags, and splits the analytics history. The absolute URLs in `index.html` are therefore left pointing at `/VolleyballReferee/` on purpose
+- **No `localStorage` key was touched** — `vb-settings`, `vb-match-state`, `vb-match-history`, and `vb-team-colors` keep their names, so an in-flight match, saved history, settings, and team colours all survive the upgrade. `STORAGE_SCHEMA` stays at **4**: the state shape is unchanged, and a bump would route live matches through `migrate()` with no 4 → 5 path
+- The `vbref-` service worker cache prefix is retained; it is internal and renaming it buys nothing
+- `APP_VERSION` bumped to v4.23 so analytics events and feedback submissions report the current build
+- Service worker v4.2.3
 
 ## v4.22 — 2026-08-07
 

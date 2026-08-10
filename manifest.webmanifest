@@ -1,7 +1,7 @@
 {
-  "name": "Volleyball Referee",
-  "short_name": "VB Ref",
-  "description": "Volleyball scoresheet for tracking matches, rotations, substitutions, and more.",
+  "name": "SpikeSheet",
+  "short_name": "SpikeSheet",
+  "description": "Volleyball scoresheet tracker — scores, rotations, substitutions, libero and timeouts under FIVB rules. Works offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

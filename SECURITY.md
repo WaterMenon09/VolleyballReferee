@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Volleyball Referee is a client-side web app with no server component, no user accounts, and no first-party data collection. All match state is stored locally in the browser (`localStorage`). The page does load Google Fonts and Google Analytics from third parties — beyond that, there is no backend to compromise.
+SpikeSheet is a client-side web app with no server component, no user accounts, and no first-party data collection. All match state is stored locally in the browser (`localStorage`). The page does load Google Fonts and Google Analytics from third parties — beyond that, there is no backend to compromise.
 
 That said, vulnerabilities affecting users — such as cross-site scripting (XSS) in markup or script injection through user inputs — are still taken seriously.
 

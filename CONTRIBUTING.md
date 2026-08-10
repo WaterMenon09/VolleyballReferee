@@ -1,4 +1,4 @@
-# Contributing to Volleyball Referee
+# Contributing to SpikeSheet
 
 Thanks for your interest in contributing. This is a small, focused project — no build system, no dependencies — so the bar to get started is low. Contributions that fix bugs, improve mobile usability, correct refereeing rules, or add missing FIVB features are especially welcome. Please be respectful and constructive in all interactions.
 

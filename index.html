@@ -5,25 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- Pins the home-screen name on iOS versions that predate manifest short_name support -->
+    <meta name="apple-mobile-web-app-title" content="SpikeSheet">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#071545">
-    <title>Volleyball Referee</title>
+    <title>SpikeSheet</title>
     <link rel="icon" type="image/png" href="icons/volleyball.png">
     <link rel="apple-touch-icon" href="icons/volleyball.png">
     <link rel="preload" href="fonts/display-800.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="fonts/body-400.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="./manifest.webmanifest">
-    <meta name="description" content="Volleyball scoresheet for tracking matches, rotations, substitutions, and more.">
+    <meta name="description" content="Volleyball scoresheet tracker — scores, rotations, substitutions, libero and timeouts under FIVB rules. Works offline.">
     <!-- Open Graph / Twitter card — so a shared match result unfurls with a title, description, and icon instead of bare text -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://watermenon09.github.io/VolleyballReferee/">
-    <meta property="og:title" content="Volleyball Referee">
-    <meta property="og:description" content="Volleyball scoresheet for tracking matches, rotations, substitutions, and more.">
+    <meta property="og:title" content="SpikeSheet">
+    <meta property="og:description" content="Volleyball scoresheet tracker — scores, rotations, substitutions, libero and timeouts under FIVB rules. Works offline.">
     <meta property="og:image" content="https://watermenon09.github.io/VolleyballReferee/icons/volleyball.png">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="Volleyball Referee">
-    <meta name="twitter:description" content="Volleyball scoresheet for tracking matches, rotations, substitutions, and more.">
+    <meta name="twitter:title" content="SpikeSheet">
+    <meta name="twitter:description" content="Volleyball scoresheet tracker — scores, rotations, substitutions, libero and timeouts under FIVB rules. Works offline.">
     <meta name="twitter:image" content="https://watermenon09.github.io/VolleyballReferee/icons/volleyball.png">
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-RBPL9H3D0Y"></script>
@@ -39,9 +41,11 @@
 </head>
 <body>
     <header class="app-bar">
-        <h1 class="app-brand">
+        <!-- aria-label because the wordmark span is display:none at <=360px and the mark is
+             aria-hidden, which would otherwise leave this heading with no accessible name -->
+        <h1 class="app-brand" aria-label="SpikeSheet">
             <svg class="app-brand-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2c3 4.5 3 15.5 0 20"/><path d="M2.5 9c5 2.5 14 2.5 19 0"/><path d="M3.5 17c4.5-3.5 12.5-3.5 17 0"/></svg>
-            <span>Volleyball<b>Referee</b></span>
+            <span>Spike<b>Sheet</b></span>
         </h1>
         <div class="app-bar-actions">
             <button id="feedbackBtn" class="top-btn" aria-label="Send feedback" title="Send feedback">
@@ -475,7 +479,7 @@
       </div>
     </div>
 
-    <footer class="credits">v4.22 | Created by Menon Pranto</footer>
+    <footer class="credits">v4.23 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
     <script>
