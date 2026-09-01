@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.25 — 2026-09-02
+
+SpikeSheet gets a homepage. Until now the app opened on a bare match-configuration form: ~282 words of visible text, every one of them a UI label. Nothing on the page said what SpikeSheet is, who it is for, or why it beats a paper scoresheet — which made it a poor landing page for anyone arriving from a search result, a forum post, or an AI recommendation.
+
+### Added
+- **A homepage at the canonical URL**, shown whenever no match is in progress. A match in progress always wins: the app restores straight to its screen exactly as before. There is deliberately **no** "has used this app before" flag — the only question asked is whether a match is restorable, which also means no new `localStorage` key.
+- **A self-playing scoreboard in the hero** — a scripted replay of a deciding set's last rallies (12–12 climbing to 16–14, side-out serves, a timeout, a rotation, match point), built from the app's own component language rather than a screenshot or a video. It is a fully isolated module: it never touches `state`, never calls the app's scoring or analytics functions, never writes to storage, and every class it creates is `demo-` prefixed. It pauses when scrolled offscreen, when the tab is hidden, and on any screen change; under `prefers-reduced-motion` it creates no timers at all and renders the final frame statically.
+- **A feature grid, a three-step "how it works", a What's-new strip** (fed from the existing `CHANGELOG_ENTRIES`, so it cannot go stale independently), **a full-time-screen showcase, six FAQ answers, and an install banner.** The install banner appears only when there is a real offer behind it — either the browser fired `beforeinstallprompt` or this is iOS, where the share-sheet instruction is the only honest route — is never shown once installed, and remembers a dismissal.
+- **Head and structured-data payload**: a keyword-bearing `<title>`, a rewritten meta description, a canonical link, `WebApplication` + `FAQPage` JSON-LD, and a purpose-built 1200×630 social card so a shared link unfurls as a real card instead of a square app icon. No `aggregateRating` — this project has no real ratings and will not invent them.
+- **Pinch zoom works again.** The viewport meta had `maximum-scale=1.0, user-scalable=no`, which blocks zoom app-wide and is an outright accessibility failure on a page carrying real prose to read.
+
+### Changed
+- **All screen changes now route through one `showScreen()` helper.** The four screens were previously toggled at ten scattered sites, each hand-listing which siblings to hide. Two bugs had already shipped from a site forgetting one — the v4.20 result-screen reload that rendered the setup form above the result, and the set-2 rotation reload that pushed the rotation screen ~1400px below the fold. "Exactly one screen visible" is now structural rather than a convention every site has to remember.
+- **Campaign parameters now reach the analytics pageview.** Because the app suppresses the automatic pageview and sends one virtual pageview per screen, every reported URL was a clean per-screen path, so landing-page and campaign reports keyed on that URL saw nothing. The first pageview now carries the landing campaign parameters (`utm_*`, `gclid` and friends, allowlisted — arbitrary query strings are never forwarded); later screens stay clean.
+
+### Fixed
+- **The set-2 rotation reload and result-screen reload overlays** can no longer recur by omission — see the `showScreen()` change above. These were real bugs in v4.20.
+
+### Internal
+These are guards for hazards this release itself introduces, not fixes for anything users hit before:
+
+- **Restore failures can no longer strand you on an empty page.** Making the homepage the default-visible screen means `#setup` is now hidden in the markup, so an exception while restoring a corrupt or hand-edited save would leave nothing on screen at all — where previously it left a usable setup form. Restore is now wrapped, the unusable save is discarded so it cannot recur on the next reload, and the homepage is shown.
+- **The `hidden` attribute now actually hides things.** The browser's own `[hidden]` rule loses to any author rule that sets `display`, so `el.hidden = true` was a silent no-op. No code used it before this release; the new install banner and demo controls do.
+
 ## v4.24 — 2026-08-10
 
 Every dialog in the app becomes properly keyboard- and screen-reader-usable. Until now no modal trapped focus, so a keyboard user could Tab straight out of an open dialog and reach the controls behind it — including the scoring buttons sitting behind a confirmation prompt. The v4.20 review demonstrated the consequence: with the serve-switch confirmation open, you could Tab behind it, score the set-winning point, then confirm, and the side switch would apply to the *next* set. This release closes that for all ten modals at once, as a single shared mechanism rather than ten patched copies.

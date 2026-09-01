@@ -2,31 +2,137 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- maximum-scale/user-scalable deliberately absent: blocking pinch zoom is an
+         accessibility failure, and the homepage carries real prose to read. Double-tap
+         zoom during scoring is governed by touch-action on the buttons, not by this. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <!-- Pins the home-screen name on iOS versions that predate manifest short_name support -->
     <meta name="apple-mobile-web-app-title" content="SpikeSheet">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#071545">
-    <title>SpikeSheet</title>
+    <title>SpikeSheet — Free Volleyball Scoreboard &amp; Scoresheet App</title>
     <link rel="icon" type="image/png" href="icons/volleyball.png">
     <link rel="apple-touch-icon" href="icons/volleyball.png">
     <link rel="preload" href="fonts/display-800.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="fonts/body-400.woff2" as="font" type="font/woff2" crossorigin>
+    <script>
+      // ── Entry gate ──────────────────────────────────────────────────────────────
+      // #home is the default-visible screen in the markup, so a crawler or a no-JS load
+      // gets real prose instead of a dead form. But a user with a match in progress must
+      // never see it flash first. This runs synchronously BEFORE the stylesheet: if a
+      // saved match exists, stamp the root element and CSS hides #home before it paints.
+      //
+      // Presence is not the same as restorable. A stale key suppresses #home for one
+      // frame and then init() shows it anyway — a synchronous script cannot do better
+      // without parsing the JSON, and init() is the authority: it routes on
+      // restoreSavedMatch()'s return value and then drops this attribute.
+      try {
+        if (localStorage.getItem('vb-match-state')) {
+          document.documentElement.setAttribute('data-entry', 'app');
+        }
+      } catch (e) {}
+    </script>
+    <style>
+      /* The gate's own rule lives HERE, beside the script that sets the attribute, and NOT in
+         styles.css. index.html is served network-first but styles.css cache-first, so a
+         returning client can run this newer HTML against an older cached stylesheet that has no
+         data-entry rule at all — which would paint the homepage on top of a restored match.
+         Co-locating them means the gate can never be out of sync with its own attribute. */
+      html[data-entry="app"] #home { display: none !important; }
+    </style>
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="./manifest.webmanifest">
-    <meta name="description" content="Volleyball scoresheet tracker — scores, rotations, substitutions, libero and timeouts under FIVB rules. Works offline.">
-    <!-- Open Graph / Twitter card — so a shared match result unfurls with a title, description, and icon instead of bare text -->
+    <meta name="description" content="Free volleyball scoreboard and scoresheet app. Track scores, rotations, substitutions, libero and timeouts under FIVB rules — in your browser, offline, with no sign-up.">
+    <!-- The canonical URL. Every og:/twitter: URL below keeps the full /VolleyballReferee/ path
+         ON PURPOSE: the app was renamed to SpikeSheet in v4.23 but the repo and Pages URL
+         deliberately did not move. "Finishing the rename" here produces a dead link and a
+         broken unfurl image. See the v4.23 CHANGELOG entry. -->
+    <link rel="canonical" href="https://watermenon09.github.io/VolleyballReferee/">
+    <!-- Open Graph / Twitter — a shared link unfurls as a real card, not bare text -->
     <meta property="og:type" content="website">
+    <meta property="og:site_name" content="SpikeSheet">
     <meta property="og:url" content="https://watermenon09.github.io/VolleyballReferee/">
-    <meta property="og:title" content="SpikeSheet">
-    <meta property="og:description" content="Volleyball scoresheet tracker — scores, rotations, substitutions, libero and timeouts under FIVB rules. Works offline.">
-    <meta property="og:image" content="https://watermenon09.github.io/VolleyballReferee/icons/volleyball.png">
-    <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="SpikeSheet">
-    <meta name="twitter:description" content="Volleyball scoresheet tracker — scores, rotations, substitutions, libero and timeouts under FIVB rules. Works offline.">
-    <meta name="twitter:image" content="https://watermenon09.github.io/VolleyballReferee/icons/volleyball.png">
+    <meta property="og:title" content="SpikeSheet — Free Volleyball Scoreboard &amp; Scoresheet App">
+    <meta property="og:description" content="Free volleyball scoreboard and scoresheet app. Track scores, rotations, substitutions, libero and timeouts under FIVB rules — in your browser, offline, with no sign-up.">
+    <meta property="og:image" content="https://watermenon09.github.io/VolleyballReferee/icons/social-card.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="SpikeSheet — the volleyball scoresheet that knows the rules. A deciding-set scoreboard showing 16-14.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="SpikeSheet — Free Volleyball Scoreboard &amp; Scoresheet App">
+    <meta name="twitter:description" content="Free volleyball scoreboard and scoresheet app. Track scores, rotations, substitutions, libero and timeouts under FIVB rules — in your browser, offline, with no sign-up.">
+    <meta name="twitter:image" content="https://watermenon09.github.io/VolleyballReferee/icons/social-card.png">
+    <meta name="twitter:image:alt" content="SpikeSheet — the volleyball scoresheet that knows the rules. A deciding-set scoreboard showing 16-14.">
+    <!-- Structured data. Static on purpose: crawlers and AI answer engines may not run JS.
+         NO aggregateRating — this project does not have real ratings and will not invent them.
+         The FAQPage answers MUST stay byte-identical to the <details> copy in #home; Google
+         drops FAQ rich results whose answers do not appear on the page. If you edit one, edit
+         both. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "name": "SpikeSheet",
+          "url": "https://watermenon09.github.io/VolleyballReferee/",
+          "applicationCategory": "SportsApplication",
+          "operatingSystem": "Any (web browser)",
+          "browserRequirements": "Requires JavaScript.",
+          "description": "Free volleyball scoreboard and scoresheet app. Track scores, rotations, substitutions, libero and timeouts under FIVB rules — in your browser, offline, with no sign-up.",
+          "screenshot": "https://watermenon09.github.io/VolleyballReferee/icons/social-card.png",
+          "isAccessibleForFree": true,
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+          "featureList": [
+            "Rotation tracking with automatic clockwise rotation on side-out",
+            "FIVB substitution enforcement: starter/substitute pair lock and per-set entry cap",
+            "Libero replacements tracked separately from substitutions",
+            "Works fully offline as an installable web app",
+            "Undo any point, including across a court swap",
+            "Full-time graphic with box score, point-by-point chart and match stats"
+          ],
+          "author": { "@type": "Person", "name": "Menon Pranto" }
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Is it free?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Yes. No account, no payment, no ads, no trial that expires. It is a personal project, not a product with a price list." }
+            },
+            {
+              "@type": "Question",
+              "name": "Does it work offline?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Yes. Add it to your home screen and the app stores itself on the device \u2014 the code, the fonts, all of it. After that it opens and scores a full match with the network off." }
+            },
+            {
+              "@type": "Question",
+              "name": "Does it really enforce FIVB rules?",
+              "acceptedAnswer": { "@type": "Answer", "text": "It enforces the ones that bite during a match: clockwise rotation on side-out, the starter-and-substitute pair lock, the per-set substitution cap, libero replacements kept separate from substitutions, timeouts and technical timeouts, and the side switch at eight points in a deciding set. It does not model the whole rulebook, and it will not referee the game for you." }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I install it?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Yes \u2014 it is a web app you can install. In Chrome or Edge use the install icon in the address bar; on iPhone or iPad open the share menu and choose \u201cAdd to Home Screen\u201d. It then launches like any other app." }
+            },
+            {
+              "@type": "Question",
+              "name": "Where does my match data go?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Nowhere. Matches, history, team colours and settings are stored in your own browser on your own device. There is no server to send them to, which also means clearing your browser data clears them." }
+            },
+            {
+              "@type": "Question",
+              "name": "Does this replace the official scoresheet?",
+              "acceptedAnswer": { "@type": "Answer", "text": "No. Treat it as a tracker and a second pair of eyes, not certified paperwork. For a sanctioned match the official sheet is still the official sheet." }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-RBPL9H3D0Y"></script>
     <script>
@@ -41,12 +147,15 @@
 </head>
 <body>
     <header class="app-bar">
-        <!-- aria-label because the wordmark span is display:none at <=360px and the mark is
-             aria-hidden, which would otherwise leave this heading with no accessible name -->
-        <h1 class="app-brand" aria-label="SpikeSheet">
+        <!-- Deliberately not a top-level heading: the hero heading in #home is the page's
+             only h1, and two h1s would split the document outline.
+             role="img" + aria-label keeps this named for screen readers, which matters
+             because the wordmark span is display:none at <=360px and the mark is
+             aria-hidden — without it the brand would have no accessible name at all. -->
+        <div class="app-brand" role="img" aria-label="SpikeSheet">
             <svg class="app-brand-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2c3 4.5 3 15.5 0 20"/><path d="M2.5 9c5 2.5 14 2.5 19 0"/><path d="M3.5 17c4.5-3.5 12.5-3.5 17 0"/></svg>
             <span>Spike<b>Sheet</b></span>
-        </h1>
+        </div>
         <div class="app-bar-actions">
             <button id="feedbackBtn" class="top-btn" aria-label="Send feedback" title="Send feedback">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
@@ -60,9 +169,215 @@
             <button id="historyBtn" class="top-btn" style="display:none">History</button>
         </div>
     </header>
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         #home — the homepage. A body child, NOT inside .container: .container caps
+         at 800px, which is right for a scoresheet and wrong for a homepage. Kept
+         first so a no-JS/crawler load renders real prose instead of a dead form.
+         showScreen() stamps body[data-screen], and CSS collapses .container on home.
+         ══════════════════════════════════════════════════════════════════════════ -->
+    <main id="home" class="home">
+      <div class="home-court" aria-hidden="true"></div>
+
+      <!-- ── Hero: the title card, then the product doing its job ── -->
+      <section class="home-hero">
+        <div class="home-wrap">
+          <p class="eyebrow home-eyebrow home-eyebrow-hero">Free · Offline · No sign-up</p>
+          <h1 class="home-h1">The volleyball scoresheet<br><em>that knows the rules</em></h1>
+          <p class="home-sub">Scores, rotations, substitutions, libero and timeouts — tracked and
+            enforced under FIVB rules, in your browser. Nothing to install, and it works courtside
+            without signal.</p>
+          <div class="home-cta-row">
+            <button id="homeStartBtn" class="btn btn-primary btn-xl">Start scoring</button>
+            <a class="home-ghost-link" href="#homeFeatures">See what it tracks</a>
+          </div>
+        </div>
+        <!-- The demo bleeds past the right gutter on desktop: a live feed continuing
+             beyond the frame, not a boxed screenshot. Clipped by .home-demo-band. -->
+        <div class="home-demo-band">
+          <div class="home-demo-rail">
+            <p class="eyebrow home-eyebrow home-demo-cap">Live — deciding set</p>
+            <div id="homeDemoRoot"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── What it tracks ── -->
+      <section id="homeFeatures" class="home-section">
+        <div class="home-wrap">
+          <p class="eyebrow home-eyebrow">What it tracks</p>
+          <h2 class="home-h2">Everything the paper sheet asks for</h2>
+          <ul class="home-grid">
+            <li class="home-card reveal">
+              <h3>Rotation, rotated for you</h3>
+              <p>Six positions per side on a court diagram. Win the serve back and the whole
+                lineup steps round on its own — clockwise, the way the rulebook says.</p>
+            </li>
+            <li class="home-card reveal">
+              <h3>Substitutions it won't let you break</h3>
+              <p>A starter and their substitute are locked into a pair for the set, and the
+                per-set entry cap is counted for you. Illegal swaps are greyed out with the
+                reason on screen.</p>
+            </li>
+            <li class="home-card reveal">
+              <h3>The libero, handled properly</h3>
+              <p>Libero replacements aren't substitutions, so they never burn a sub or lock a
+                pair. The app keeps that distinction so you don't have to.</p>
+            </li>
+            <li class="home-card reveal">
+              <h3>Works with no signal</h3>
+              <p>Install it once and the whole app runs from your phone. No account, no network,
+                nothing to fail in a sports hall basement.</p>
+            </li>
+            <li class="home-card reveal">
+              <h3>Undo that survives a court swap</h3>
+              <p>Step back through any point. Swap ends mid-set and undo still knows which side
+                scored what.</p>
+            </li>
+            <li class="home-card reveal">
+              <h3>A full-time graphic at the end</h3>
+              <p>Set-by-set box score, a point-by-point chart, and the story of the match —
+                longest run, biggest comeback, how often the lead changed.</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ── How it works: a real three-step sequence, in the app's own set-pill ── -->
+      <section class="home-section home-section-quiet">
+        <div class="home-wrap">
+          <p class="eyebrow home-eyebrow">How it works</p>
+          <h2 class="home-h2">Three steps to first serve</h2>
+          <ol class="home-steps">
+            <li class="home-step reveal">
+              <span class="home-step-pill">Set up</span>
+              <p>Name both teams, pick their colours, and type the shirt numbers. Best of three
+                or best of five.</p>
+            </li>
+            <li class="home-step reveal">
+              <span class="home-step-pill">Rotate</span>
+              <p>Drop each player onto their starting position on the court diagram. From set two
+                you can reuse the last lineup in one tap.</p>
+            </li>
+            <li class="home-step reveal">
+              <span class="home-step-pill">Score</span>
+              <p>Two taps a rally. Rotation, serve, timeouts, technical timeouts and side switches
+                all follow on their own.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ── Result-screen showcase ── -->
+      <section class="home-section">
+        <div class="home-wrap">
+          <p class="eyebrow home-eyebrow">At full time</p>
+          <h2 class="home-h2">The match, written up for you</h2>
+          <p class="home-sub">Set-by-set box score, a point-by-point chart of every rally, and the
+            story of the match — longest run, biggest comeback, how often the lead changed.</p>
+          <figure class="home-shot reveal">
+            <!-- width/height are mandatory, not decorative: without them this image lands with no
+                 reserved box and shifts everything below it, which is the CLS budget in §7.
+                 Generated from the real result screen; regenerate if that screen changes. -->
+            <img src="icons/result-screen.webp" alt="SpikeSheet's full-time screen: MSBY beat Schweiden 2-1, shown with a set-by-set box score, per-set durations, and match statistics including longest run, lead changes and biggest comeback."
+                 width="400" height="860" loading="lazy" decoding="async">
+          </figure>
+        </div>
+      </section>
+
+      <!-- ── What's new: rendered from CHANGELOG_ENTRIES by renderHomeWhatsNew() ── -->
+      <section class="home-section">
+        <div class="home-wrap">
+          <p class="eyebrow home-eyebrow">What's new</p>
+          <h2 class="home-h2">Still being built</h2>
+          <div id="homeWhatsNew" class="home-news"></div>
+          <button id="homeChangelogLink" class="home-ghost-link home-ghost-btn">See the full history</button>
+        </div>
+      </section>
+
+      <!-- ── FAQ ── -->
+      <section class="home-section home-section-quiet">
+        <div class="home-wrap home-wrap-narrow">
+          <p class="eyebrow home-eyebrow">Questions</p>
+          <h2 class="home-h2">Before you start</h2>
+          <div class="home-faq">
+            <details class="home-faq-item">
+              <summary>Is it free?</summary>
+              <p>Yes. No account, no payment, no ads, no trial that expires. It is a personal
+                project, not a product with a price list.</p>
+            </details>
+            <details class="home-faq-item">
+              <summary>Does it work offline?</summary>
+              <p>Yes. Add it to your home screen and the app stores itself on the device — the
+                code, the fonts, all of it. After that it opens and scores a full match with the
+                network off.</p>
+            </details>
+            <details class="home-faq-item">
+              <summary>Does it really enforce FIVB rules?</summary>
+              <p>It enforces the ones that bite during a match: clockwise rotation on side-out,
+                the starter-and-substitute pair lock, the per-set substitution cap, libero
+                replacements kept separate from substitutions, timeouts and technical timeouts,
+                and the side switch at eight points in a deciding set. It does not model the
+                whole rulebook, and it will not referee the game for you.</p>
+            </details>
+            <details class="home-faq-item">
+              <summary>Can I install it?</summary>
+              <p>Yes — it is a web app you can install. In Chrome or Edge use the install icon in
+                the address bar; on iPhone or iPad open the share menu and choose “Add to Home
+                Screen”. It then launches like any other app.</p>
+            </details>
+            <details class="home-faq-item">
+              <summary>Where does my match data go?</summary>
+              <p>Nowhere. Matches, history, team colours and settings are stored in your own
+                browser on your own device. There is no server to send them to, which also means
+                clearing your browser data clears them.</p>
+            </details>
+            <details class="home-faq-item">
+              <summary>Does this replace the official scoresheet?</summary>
+              <p>No. Treat it as a tracker and a second pair of eyes, not certified paperwork. For
+                a sanctioned match the official sheet is still the official sheet.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Install banner ──
+           Hidden until there is something real to offer: either beforeinstallprompt fired
+           (so the Install button can actually install) or this is iOS, where that event never
+           fires and the only honest thing is the share-sheet instruction. Never shown when
+           already installed. One dismissal, remembered — see §11 non-goals: no nagging. -->
+      <section id="homeInstall" class="home-install hidden" aria-labelledby="homeInstallTitle">
+        <div class="home-wrap home-install-inner">
+          <div class="home-install-text">
+            <h2 id="homeInstallTitle" class="home-install-title">Add SpikeSheet to your home screen</h2>
+            <p id="homeInstallCopy" class="home-install-copy">It opens like any other app, and scores a full match with no signal.</p>
+          </div>
+          <div class="home-install-actions">
+            <button id="homeInstallBtn" class="btn btn-primary">Install</button>
+            <button id="homeInstallDismiss" class="home-linkish">Not now</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Final CTA ── -->
+      <section class="home-outro">
+        <div class="home-wrap home-wrap-narrow">
+          <h2 class="home-h2 home-outro-h">Next match is on you.</h2>
+          <p class="home-sub">Set it up in under a minute.</p>
+          <button id="homeStartBtn2" class="btn btn-primary btn-xl">Start scoring</button>
+          <p class="home-foot-links">
+            <a href="https://github.com/watermenon09/VolleyballReferee">Source on GitHub</a>
+            <button id="homeFeedbackLink" class="home-linkish">Send feedback</button>
+          </p>
+        </div>
+      </section>
+    </main>
+
     <div class="container">
 
-        <div id="setup" class="setup-panel">
+        <!-- `hidden` from here on: #home is the markup default. init() shows this.
+             tabindex="-1" so the homepage CTA can move focus onto the new screen without
+             focusing an input (which would pop the on-screen keyboard on a phone). -->
+        <div id="setup" class="setup-panel hidden" tabindex="-1">
             <div class="screen-head">
                 <span class="eyebrow">New Match</span>
                 <h2>Match Setup</h2>
@@ -486,9 +801,46 @@
       </div>
     </div>
 
-    <footer class="credits">v4.24 | Created by Menon Pranto</footer>
+    <footer class="credits">v4.25 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
+    <script>
+      // ── Stale-cache safety net ───────────────────────────────────────────────────────
+      // index.html is served network-first but app.js cache-first, so a returning client can
+      // run THIS html against a pre-homepage app.js — for one load after a deploy, or
+      // indefinitely until sw.js's VERSION is bumped. That old app.js has no 'home' in
+      // SCREEN_IDS, so it cannot hide #home: mid-match you would get the marketing page
+      // stacked above a live scoreboard, and as a new visitor an unstyled homepage whose
+      // "Start scoring" button has no handler at all.
+      //
+      // startMatch present + showScreen absent == old-but-working app.js, so fall back to the
+      // pre-homepage layout. If NEITHER exists, app.js is genuinely broken and the homepage's
+      // static prose is the more useful thing to leave on screen than a form that cannot work.
+      window.addEventListener('load', function () {
+        // showScreen present == this page's own app.js ran; it owns routing entirely.
+        if (typeof window.showScreen === 'function') return;
+
+        // Nothing left on this page will route a screen. Drop the gate attribute FIRST and
+        // unconditionally: while it is set, CSS hides #home, and #setup is `hidden` in the
+        // markup — so leaving it produces a genuinely blank page. routeInitialScreen()'s own
+        // try/finally cannot help here, because in this branch app.js never executed at all
+        // (parse error, 404, blocked by an extension).
+        document.documentElement.removeAttribute('data-entry');
+
+        var home = document.getElementById('home');
+        if (typeof window.startMatch === 'function') {
+          // Old-but-working app.js: it has no 'home' in SCREEN_IDS, so it cannot hide the
+          // homepage. Fall back to the pre-homepage layout.
+          if (home) home.classList.add('hidden');
+          // ...but only surface the form if it did not already restore a real screen.
+          var live = document.querySelector('.scoreboard:not(.hidden), .rotation-setup:not(.hidden), .match-result:not(.hidden)');
+          var setup = document.getElementById('setup');
+          if (setup && !live) setup.classList.remove('hidden');
+        }
+        // else: app.js is genuinely broken. Leave the homepage's static prose on screen — it
+        // explains the product, where a form with no event handlers explains nothing.
+      });
+    </script>
     <script>
       // The service worker serves the whole app shell cache-first, which during local
       // development silently hands back stale CSS/JS and masks every edit. Skip it on

@@ -77,6 +77,15 @@ html {
     overflow-x: hidden;
 }
 
+/* The UA stylesheet's `[hidden] { display: none }` loses to ANY author rule that sets
+   `display`, regardless of specificity — so `el.hidden = true` silently did nothing to
+   `.demo-toggle` (which declares `display: inline-flex`). That shipped a control that was
+   meant to be hidden but stayed visible, tab-reachable, and inert. `!important` is required
+   here: a bare `[hidden]` ties with a single class and would lose on source order to every
+   component rule below. Nothing in this app is `hidden` yet expected to render, so this is
+   safe, and it makes `el.hidden` work the way anyone reading it expects. */
+[hidden] { display: none !important; }
+
 /* ── Global type utilities ───────────────────────────────────────────────── */
 
 .eyebrow {
@@ -3307,6 +3316,808 @@ textarea:focus-visible,
     outline-offset: 2px;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HOMEPAGE (#home)
+   Tokens only — no raw rgba/hex. Composition: the hero is a broadcast title card
+   with the live demo running as a full-bleed band beneath it, so the first thing a
+   stranger sees is the product scoring a match. Everything below the hero stays
+   deliberately quiet; the demo is the only loud element on the page.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* The entry gate's `html[data-entry="app"] #home { display: none }` rule deliberately does
+   NOT live here — it is inline in index.html beside the script that sets the attribute,
+   because this stylesheet is served cache-first while index.html is network-first and the two
+   must never disagree. Do not re-add it here; that would split the source of truth. */
+
+/* .container caps at 800px, which is right for a scoresheet and wrong for a
+   homepage, and its app-bar top padding would leave a dead band under #home.
+   showScreen() stamps body[data-screen]. */
+body[data-screen="home"] .container { display: none; }
+
+/* #setup carries tabindex="-1" purely as a screen-change focus target for the homepage CTA.
+   Programmatic focus should move the caret, not draw a box around the whole form. Keyboard
+   focus on the controls inside it is unaffected. */
+#setup:focus { outline: none; }
+
+.home {
+    position: relative;
+    display: block;
+    padding-top: calc(52px + env(safe-area-inset-top, 0px));
+    padding-bottom: var(--sp-8);
+    /* BOTH axes. .home-court is deliberately oversized so its drift never exposes an edge;
+       with only overflow-x it inflated document height by ~600px and left dead space below
+       the final CTA. */
+    overflow: clip;
+}
+
+/* ── Ambient court geometry ─────────────────────────────────────────────────
+   Atmosphere, not a second signature: two perpendicular hairline families at the
+   opacity of a floor marking seen under stadium light, plus a gold vignette that
+   pools behind the hero. Drifts slowly; static under reduced motion. */
+.home-court {
+    position: absolute;
+    /* Oversized on every side so the drift below cannot expose an edge; .home clips it. */
+    inset: -80px -80px auto -80px;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    background:
+        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(var(--gold-rgb), 0.10), transparent 70%),
+        repeating-linear-gradient(90deg, var(--stroke-1) 0 1px, transparent 1px 132px),
+        repeating-linear-gradient(0deg, var(--stroke-1) 0 1px, transparent 1px 132px);
+    mask-image: linear-gradient(to bottom, var(--ink) 0%, transparent 62%);
+    -webkit-mask-image: linear-gradient(to bottom, var(--ink) 0%, transparent 62%);
+    animation: home-drift 38s var(--ease-out) infinite alternate;
+}
+@keyframes home-drift {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-44px, 26px, 0); }
+}
+
+/* ── Shared layout ─────────────────────────────────────────────────────────── */
+.home-wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 var(--sp-4);
+}
+.home-wrap-narrow { max-width: 760px; }
+
+.home-eyebrow { margin-bottom: var(--sp-4); }
+.home-eyebrow-hero { color: var(--ink-45); }
+
+.home-h1 {
+    font: 800 clamp(2.5rem, 8.4vw, 5.4rem)/0.92 var(--font-display);
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    text-wrap: balance;
+    margin-bottom: var(--sp-4);
+}
+/* The promise is the second line — the differentiator carries the gold. */
+.home-h1 em {
+    font-style: normal;
+    color: var(--gold);
+}
+
+.home-h2 {
+    font: 800 clamp(1.75rem, 4.2vw, 2.75rem)/1 var(--font-display);
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin-bottom: var(--sp-5);
+    text-wrap: balance;
+}
+
+.home-sub {
+    font: 400 clamp(1rem, 1.9vw, 1.2rem)/1.55 var(--font-body);
+    color: var(--ink-85);
+    max-width: 56ch;
+    margin-bottom: var(--sp-5);
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────────── */
+.home-hero { padding-top: var(--sp-8); }
+
+.home-cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-4) var(--sp-5);
+    margin-bottom: var(--sp-8);
+}
+
+/* The rule is text-decoration rather than border-bottom on purpose: a border sits on the
+   BOX, so growing the box to a 44px touch target would drag the underline away from the
+   text. text-underline-offset keeps it hugging the glyphs at any box height. */
+.home-ghost-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: var(--sp-3) 0;
+    font: 600 0.95rem/1 var(--font-body);
+    letter-spacing: 0.04em;
+    color: var(--ink-85);
+    text-decoration: underline;
+    text-decoration-color: var(--stroke-3);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 6px;
+    transition: color var(--dur-fast) var(--ease-out),
+                text-decoration-color var(--dur-fast) var(--ease-out);
+}
+.home-ghost-link:hover { color: var(--gold); text-decoration-color: var(--gold-deep); }
+/* A <button> that must read as the link beside it (opens a modal, not a URL). */
+.home-ghost-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+}
+
+/* ── The demo band: full-bleed to the right edge on desktop ─────────────────
+   The panel's left edge aligns with the content column and it runs out past the
+   right gutter, so it reads as a live feed continuing beyond the frame rather
+   than a boxed screenshot. `overflow: hidden` guarantees no horizontal scroll. */
+.home-demo-band {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    padding-bottom: var(--sp-8);
+}
+.home-demo-rail {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 var(--sp-4);
+}
+.home-demo-cap { color: var(--ink-45); margin-bottom: var(--sp-3); }
+
+@media (min-width: 1024px) {
+    .home-demo-rail {
+        max-width: none;
+        /* Align the left edge with .home-wrap's content column, run to the right edge. */
+        padding-left: max(var(--sp-4), calc(50vw - 540px + var(--sp-4)));
+        padding-right: 0;
+    }
+    /* Target .demo-widget, not #homeDemoRoot: the widget is the visible panel and carries
+       its own `max-width: 700px; margin: 0 auto`, which would otherwise re-centre it inside
+       the full-bleed rail and cancel the bleed entirely. */
+    .home-demo-rail .demo-widget {
+        max-width: none;
+        margin-left: 0;
+        margin-right: 0;
+        border-radius: var(--r-lg) 0 0 var(--r-lg);
+    }
+}
+
+/* Phone held in landscape: ~390px of height with an 86px headline pushed "Start scoring" to
+   y=389 — the single action a stranger needs, exactly at the fold. Tighten the hero instead
+   of letting it fall off screen. Height-keyed, not width-keyed, because that is the actual
+   constraint. */
+@media (max-height: 520px) and (min-width: 600px) {
+    .home-hero { padding-top: var(--sp-5); }
+    .home-h1 { font-size: clamp(1.9rem, 5vw, 2.9rem); }
+    .home-sub { font-size: 1rem; margin-bottom: var(--sp-4); }
+    .home-cta-row { margin-bottom: var(--sp-6); }
+    .home-demo-band { padding-bottom: var(--sp-6); }
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────────── */
+.home-section { padding: var(--sp-8) 0; }
+.home-section-quiet {
+    position: relative;
+    z-index: 1;
+    background: var(--surface-1);
+    border-top: 1px solid var(--stroke-1);
+    border-bottom: 1px solid var(--stroke-1);
+}
+
+/* ── Feature grid ──────────────────────────────────────────────────────────── */
+.home-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--sp-4);
+    list-style: none;
+}
+.home-card {
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--r-md);
+    box-shadow: var(--glass-edge);
+    padding: var(--sp-5);
+    transition: background var(--dur-med) var(--ease-out),
+                border-color var(--dur-med) var(--ease-out),
+                transform var(--dur-med) var(--ease-out);
+}
+.home-card:hover {
+    background: var(--surface-2);
+    border-color: var(--stroke-2);
+    transform: translateY(-2px);
+}
+.home-card h3 {
+    font: 600 1.15rem/1.15 var(--font-display);
+    letter-spacing: 0.01em;
+    color: var(--gold);
+    margin-bottom: var(--sp-2);
+}
+.home-card p {
+    font: 400 0.95rem/1.55 var(--font-body);
+    color: var(--ink-65);
+}
+
+/* ── How it works: the app's own pill, marking a real sequence ─────────────── */
+.home-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--sp-5);
+    list-style: none;
+    counter-reset: home-step;
+}
+.home-step { position: relative; }
+.home-step-pill {
+    display: inline-block;
+    counter-increment: home-step;
+    font: 700 0.78rem/1 var(--font-body);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--navy-950);
+    background: var(--gold);
+    border-radius: var(--r-pill);
+    padding: 9px var(--sp-4);
+    margin-bottom: var(--sp-3);
+}
+/* The arrow encodes the sequence — it is not decoration, and it disappears when
+   the grid wraps to a single column and the order is already vertical. */
+@media (min-width: 760px) {
+    .home-step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        top: 18px;
+        right: calc(var(--sp-5) * -0.72);
+        width: var(--sp-4);
+        height: 1px;
+        background: var(--stroke-2);
+    }
+}
+.home-step p {
+    font: 400 0.95rem/1.55 var(--font-body);
+    color: var(--ink-65);
+}
+
+/* ── What's new strip ──────────────────────────────────────────────────────── */
+.home-news {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-5);
+}
+.home-news-item {
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-1);
+    border-left: 2px solid var(--gold-deep);
+    border-radius: var(--r-sm);
+    padding: var(--sp-4);
+}
+.home-news-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-2);
+}
+.home-news-ver {
+    font: 800 1rem/1 var(--font-display);
+    letter-spacing: 0.02em;
+    color: var(--gold);
+}
+.home-news-date {
+    font: 500 0.72rem/1 var(--font-body);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-45);
+}
+.home-news-item p {
+    font: 400 0.9rem/1.5 var(--font-body);
+    color: var(--ink-65);
+}
+
+/* ── FAQ ───────────────────────────────────────────────────────────────────── */
+.home-faq {
+    border-top: 1px solid var(--stroke-1);
+}
+.home-faq-item {
+    border-bottom: 1px solid var(--stroke-1);
+}
+/* Block, not flex, deliberately. As a flex container the question text became an anonymous
+   flex item with min-width:auto, so it could not shrink below its longest word and overflowed
+   its box by ~4px at 320px. Block layout lets the text wrap; the chevron is positioned out of
+   flow and the padding-right reserves its lane. */
+.home-faq-item summary {
+    display: block;
+    position: relative;
+    cursor: pointer;
+    list-style: none;
+    min-height: 56px;
+    padding: var(--sp-4) calc(var(--sp-5) + var(--sp-2)) var(--sp-4) 0;
+    font: 600 1.05rem/1.35 var(--font-body);
+    color: var(--ink);
+    transition: color var(--dur-fast) var(--ease-out);
+}
+.home-faq-item summary::-webkit-details-marker { display: none; }
+.home-faq-item summary:hover { color: var(--gold); }
+.home-faq-item summary::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: var(--sp-1);
+    width: 10px; height: 10px;
+    border-right: 2px solid var(--ink-45);
+    border-bottom: 2px solid var(--ink-45);
+    transform: translateY(-70%) rotate(45deg);
+    transition: transform var(--dur-med) var(--ease-out);
+}
+.home-faq-item[open] summary::after { transform: translateY(-30%) rotate(-135deg); }
+.home-faq-item[open] summary { color: var(--gold); }
+.home-faq-item p {
+    font: 400 0.98rem/1.6 var(--font-body);
+    color: var(--ink-85);
+    padding: 0 0 var(--sp-5);
+    max-width: 62ch;
+}
+
+/* ── Outro ─────────────────────────────────────────────────────────────────── */
+.home-outro {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: var(--sp-8) 0 var(--sp-7);
+}
+.home-outro .home-sub { margin-inline: auto; }
+.home-outro-h { margin-bottom: var(--sp-3); }
+.home-foot-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-5);
+    margin-top: var(--sp-6);
+}
+.home-foot-links a, .home-linkish {
+    font: 500 0.88rem/1 var(--font-body);
+    color: var(--ink-45);
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    transition: color var(--dur-fast) var(--ease-out);
+}
+.home-foot-links a:hover, .home-linkish:hover { color: var(--gold); }
+
+/* ── Scroll reveal (JS adds .is-in) ─────────────────────────────────────────
+   Double-gated, and both gates matter:
+   - `html[data-js]` — set in `initHomeReveals()` (app.js), immediately before the observer is
+     created. NOT in the inline <head> script: that runs unconditionally, so an attribute set
+     there would still be present when app.js throws, leaving every card at opacity 0 with
+     nothing alive to reveal it. Set where it is, the attribute means "reveals are being
+     managed", so no JS and failed JS both fall through to opacity 1.
+   - `no-preference`: a reduced-motion user never gets the hidden start state at all,
+     so nothing depends on the observer firing for them. */
+@media (prefers-reduced-motion: no-preference) {
+    html[data-js] .reveal {
+        opacity: 0;
+        transform: translateY(14px);
+        transition: opacity var(--dur-slow) var(--ease-out),
+                    transform var(--dur-slow) var(--ease-out);
+    }
+    html[data-js] .reveal.is-in { opacity: 1; transform: none; }
+}
+
+/* The app's version footer is position: fixed, which on a long scrolling homepage parks it
+   over the middle of the content. On home it becomes a normal block and lands where a footer
+   belongs — after the final CTA. */
+body[data-screen="home"] .credits {
+    position: static;
+    text-align: center;
+    padding: 0 var(--sp-4) var(--sp-6);
+}
+
+/* Keyboard focus on homepage controls reuses the app's ring treatment. */
+.home-ghost-link:focus-visible,
+.home-linkish:focus-visible,
+.home-foot-links a:focus-visible,
+.home-faq-item summary:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+    border-radius: var(--r-sm);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HOMEPAGE DEMO WIDGET (.demo-*)
+   Inlined rather than shipped as home-demo.css: a separate file would need adding to
+   APP_SHELL in sw.js or it would 404 offline. Fully isolated — every selector below is
+   .demo-* scoped and must stay that way, so app restyles and demo restyles cannot
+   collide. See the homeDemo IIFE in app.js.
+
+   Composes off the global design tokens, with ONE sanctioned exception: --demo-t1/--demo-t2 are
+   defined on .demo-widget with hex literals, because a token has to be defined somewhere and
+   these must NOT come from the visitor's own --team1-color/--team2-color. See CLAUDE.md.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/*!
+ * SpikeSheet self-playing scoreboard demo (isolated widget)
+ *
+ * Isolation contract: every selector below is scoped under `.demo-`.
+ * No bare element selectors, no :root, no app class names. Composes off
+ * the globally defined design tokens, with the single exception noted
+ * above: --demo-t1/--demo-t2 are DEFINED here with hex literals, on
+ * .demo-widget, precisely so this widget does not inherit the visitor's
+ * own --team1-color/--team2-color.
+ */
+
+.demo-widget {
+  /* The demo's OWN team colours. It used to read --team1-color/--team2-color, which are the
+     VISITOR's persisted team colours (applyTeamColors writes them to :root and saves them under
+     vb-team-colors) — so the hero changed colour depending on what the visitor last picked for
+     their own teams, and the demo quietly depended on app state. Declared here on the widget,
+     not :root, so they cannot leak the other way either.
+
+     Homage to Haikyuu!!: the MSBY Black Jackals play in black with antique-gold claw markings,
+     so gold is the only usable half of that pair on a dark panel; the Schweiden Adlers are white
+     with royal-blue lettering, lifted here for legibility on navy. */
+  --demo-t1: #c9a24b;  --demo-t1-rgb: 201, 162, 75;
+  --demo-t2: #4a7be8;  --demo-t2-rgb: 74, 123, 232;
+
+  box-sizing: border-box;
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  max-width: 700px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: var(--sp-4) var(--sp-3) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--surface-1);
+  border: 1px solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2), var(--glass-edge);
+  overflow: hidden;
+  font-family: var(--font-body);
+  color: var(--ink);
+}
+
+/* purely decorative — hidden from AT via aria-hidden in the markup;
+   .demo-controls (outside this wrapper) carries the real button */
+.demo-visual {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.demo-setlabel {
+  font: 600 0.72rem/1 var(--font-body);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+/* ── serve indicator: a single dot that slides between the two sides ── */
+
+.demo-servetrack {
+  box-sizing: border-box;
+  position: relative;
+  width: min(220px, 60%);
+  height: 10px;
+}
+
+.demo-servedot {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: var(--r-pill);
+  background: var(--demo-t1);
+  box-shadow: 0 0 8px rgba(var(--demo-t1-rgb), 0.65);
+  transition: left var(--dur-med) var(--ease-out), background var(--dur-med) var(--ease-out), box-shadow var(--dur-med) var(--ease-out);
+}
+
+.demo-servedot[data-side="2"] {
+  left: calc(100% - 10px);
+  background: var(--demo-t2);
+  box-shadow: 0 0 8px rgba(var(--demo-t2-rgb), 0.65);
+}
+
+/* ── team panels ── */
+
+.demo-court {
+  box-sizing: border-box;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.demo-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  text-align: center;
+  padding: var(--sp-4) var(--sp-2);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 2px solid transparent;
+}
+
+.demo-panel--t1 {
+  border-color: var(--demo-t1);
+  box-shadow: inset 0 0 24px rgba(var(--demo-t1-rgb), 0.08);
+}
+
+.demo-panel--t2 {
+  border-color: var(--demo-t2);
+  box-shadow: inset 0 0 24px rgba(var(--demo-t2-rgb), 0.08);
+}
+
+.demo-teamname {
+  /* Real club names are long ("MSBY Black Jackals"), so this wraps to two lines rather than
+     shrinking; min-height reserves both lines so the two panels' scores stay on one baseline
+     even when only one name wraps. */
+  min-height: 2.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 clamp(0.66rem, 3.1cqw, 0.9rem)/1.1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-65);
+  margin-bottom: var(--sp-2);
+  overflow-wrap: anywhere;
+}
+
+.demo-score {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.9;
+  color: var(--ink);
+  text-shadow: var(--shadow-1);
+  /* fallback for browsers without container-query units, then the real thing */
+  font-size: clamp(2rem, 8vw, 3.2rem);
+  font-size: clamp(2rem, 15cqw, 3.6rem);
+}
+
+.demo-score.demo-pulse {
+  animation: demo-score-pop var(--dur-med) var(--ease-spring);
+}
+
+@keyframes demo-score-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+/* ── timeout / rotation chip (one reused slot, reserved height) ── */
+
+.demo-feed {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--sp-7) - var(--sp-2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.demo-chip {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  border: 1px solid var(--stroke-2);
+  font: 600 0.72rem/1.6 var(--font-body);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(6px) scale(0.92);
+  transition: opacity var(--dur-med) var(--ease-spring), transform var(--dur-med) var(--ease-spring);
+}
+
+.demo-chip[data-team="1"] { border-color: var(--demo-t1); }
+.demo-chip[data-team="2"] { border-color: var(--demo-t2); }
+
+.demo-feed--visible .demo-chip {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ── match point banner (fixed height slot so nothing else shifts) ── */
+
+.demo-matchpoint {
+  box-sizing: border-box;
+  min-height: calc(var(--sp-7) - var(--sp-1));
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-1) var(--sp-5);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font: 600 0.82rem/1 var(--font-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity var(--dur-med) var(--ease-spring), transform var(--dur-med) var(--ease-spring);
+}
+
+.demo-matchpoint--visible {
+  opacity: 1;
+  transform: scale(1);
+  animation: demo-goldpulse calc(var(--dur-slow) * 3) var(--ease-out) infinite;
+}
+
+@keyframes demo-goldpulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(var(--gold-rgb), 0); }
+  50% { box-shadow: 0 0 22px rgba(var(--gold-rgb), 0.55); }
+}
+
+/* ── pause/replay control ── */
+
+.demo-controls {
+  margin-top: var(--sp-1);
+}
+
+.demo-toggle {
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--stroke-2);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  min-height: 44px;
+  min-width: 44px;
+  color: var(--ink-85);
+  font: 600 0.78rem/1 var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.demo-toggle:hover { background: var(--surface-3); }
+.demo-toggle:active { transform: scale(0.96); }
+.demo-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.demo-toggle-icon {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* paused → play triangle */
+.demo-toggle-icon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 1px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 6px 0 6px 10px;
+  border-color: transparent transparent transparent currentColor;
+}
+
+/* playing → pause bars */
+.demo-toggle--playing .demo-toggle-icon::before { content: none; }
+.demo-toggle--playing .demo-toggle-icon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 1px;
+  width: 3px;
+  height: 12px;
+  background: currentColor;
+  box-shadow: 6px 0 0 currentColor;
+}
+
+/* ── narrow-container tightening (based on the widget's own width, not viewport) ── */
+
+@container (max-width: 360px) {
+  .demo-court { gap: var(--sp-2); }
+  .demo-panel { padding: var(--sp-3) var(--sp-1); }
+}
+
+/* ── reduced motion: freeze everything (belt and braces with the JS check) ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-score.demo-pulse,
+  .demo-servedot,
+  .demo-chip,
+  .demo-matchpoint,
+  .demo-matchpoint--visible,
+  .demo-toggle {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── Result-screen showcase ─────────────────────────────────────────────────── */
+.home-shot {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--sp-6);
+}
+/* A restrained device frame: a rounded border, a hairline stroke and a deep shadow, which is
+   enough to read as "this is a phone" without drawing a literal handset. No pseudo-elements —
+   the screenshot itself carries the app bar, so extra chrome would just double it up. */
+.home-shot img {
+    display: block;
+    width: 100%;
+    max-width: 340px;
+    height: auto;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--stroke-2);
+    box-shadow: var(--shadow-3), var(--glass-edge);
+    background: var(--navy-950);
+}
+
+/* ── Install banner ─────────────────────────────────────────────────────────────
+   Not a modal, not a toast, not sticky: a normal band in the page flow, so it cannot
+   cover content or follow the reader down the page. */
+.home-install {
+    position: relative;
+    z-index: 1;
+    padding: var(--sp-6) 0;
+    background: linear-gradient(180deg, rgba(var(--gold-rgb), 0.10), transparent);
+    border-top: 1px solid var(--stroke-1);
+    border-bottom: 1px solid var(--stroke-1);
+}
+.home-install-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4) var(--sp-5);
+}
+.home-install-text { min-width: 0; flex: 1 1 320px; }
+.home-install-title {
+    font: 800 clamp(1.25rem, 2.6vw, 1.6rem)/1.1 var(--font-display);
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    margin-bottom: var(--sp-2);
+}
+.home-install-copy {
+    font: 400 0.95rem/1.5 var(--font-body);
+    color: var(--ink-65);
+    max-width: 54ch;
+}
+.home-install-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    flex: 0 0 auto;
+}
+
 /* ── Reduced motion — MUST be last rule block (cascade wins over everything) ── */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -3321,4 +4132,10 @@ textarea:focus-visible,
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
+
+    /* Homepage: the universal rule above already stops these, but state them so the
+       intent survives a future refactor of that rule. The ambient court stops drifting
+       and the reveals are handled by the no-preference gate, not by an override. */
+    .home-court { animation: none !important; }
+    .home-card:hover { transform: none !important; }
 }

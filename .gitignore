@@ -2,3 +2,9 @@
 docs/
 .superpowers/
 .playwright-mcp/
+
+# Scratch files from screenshot/asset generation. These live in the repo root only because
+# @font-face needs them served same-origin; a reflexive `git add .` would otherwise deploy
+# the generator page and raw captures to GitHub Pages.
+_*.html
+_*.png

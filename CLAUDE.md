@@ -37,7 +37,7 @@ The full reasoning is in the v4.23 `CHANGELOG.md` entry.
 
 The app is a single-page vanilla JS application with three source files plus PWA support files:
 
-- `index.html` — all markup; four screens toggled via the `hidden` CSS class
+- `index.html` — all markup; five screens toggled via the `hidden` CSS class, all routed through `showScreen()`
 - `styles.css` — all styling; uses CSS variables and flexbox
 - `app.js` — all logic; single file, no modules
 - `manifest.webmanifest` — installability metadata; relative `start_url`/`scope` resolve correctly under the `/VolleyballReferee/` GitHub Pages subpath
@@ -46,12 +46,16 @@ The app is a single-page vanilla JS application with three source files plus PWA
 
 ### Screen flow
 
-Four views are shown/hidden by toggling the `hidden` class on their container divs:
+Five views are shown/hidden by toggling the `hidden` class on their container divs. **Never
+toggle one directly — call `showScreen(name)`** (see the screen-router section).
 
-1. `#setup` — match configuration form
-2. `#rotationSetup` — starting rotation assignment (before each set)
-3. `#scoreboard` — active game screen
-4. `#matchResult` — post-match result
+1. `#home` — the homepage, shown when no match is in progress. **The markup default** (the only
+   one without `hidden`), and the only screen that is a `<body>` child rather than living inside
+   `.container`
+2. `#setup` — match configuration form
+3. `#rotationSetup` — starting rotation assignment (before each set)
+4. `#scoreboard` — active game screen
+5. `#matchResult` — post-match result
 
 Ten modals are used across screens: `#subModal` (player substitution, overlays scoreboard), `#timeoutModal` (30-second countdown, overlays scoreboard), `#setBreakModal` (3-minute set break timer, shown between sets), `#returnToSetupModal` (confirmation dialog for returning to setup mid-match), `#deciderSwitchModal` (side-switch notification at 8 points in the deciding set), `#serveSwitchModal` (confirmation for a manual serve flip, added v4.12), `#settingsModal` (configurable match rules and app preferences), `#feedbackModal` (in-app feedback form via Web3Forms), `#historyModal` (match history log), and `#changelogModal` (in-app "What's new", added v4.22).
 
@@ -185,14 +189,186 @@ The button (`#changelogBtn`) is shown only on `#setup`, via `updateAppBarForScre
 
 ### Screen tracking / virtual page views (v4.21)
 
-The app is an SPA, so GA4 would otherwise record one `page_view` per session and pool all engagement time onto it. `trackScreen(name)` sends a virtual `page_view` (and a `gtag('set', ...)` so GA4's automatic engagement measurement follows the screen) whenever one of the four screens becomes visible. `trackVisibleScreen()` is the catch-all called at the tail of `init()` for paths with no named entry point — notably every `restoreSavedMatch()` branch.
+The app is an SPA, so GA4 would otherwise record one `page_view` per session and pool all engagement time onto it. `trackScreen(name)` sends a virtual `page_view` (and a `gtag('set', ...)` so GA4's automatic engagement measurement follows the screen) whenever one of the five screens becomes visible. `trackVisibleScreen()` is the catch-all at the tail of `init()`; since `showScreen()` landed it is a safety net rather than the reporter for any specific path.
 
 **Two invariants this depends on. Breaking either silently corrupts the analytics:**
 
-1. **Exactly one of the four screens may be visible at a time.** `trackVisibleScreen()` reports the *first* visible screen in `SCREEN_IDS` order, so two visible screens produce a wrong or phantom pageview. This is not merely an analytics concern — `#setup` carries no `hidden` class in the markup, so it is default-visible on a fresh page, and any restore path that forgets to hide it renders the whole setup form stacked above the real screen. That shipped as a real bug through v4.20: reloading into the set-2 rotation screen showed the setup form with the rotation screen ~1400px below the fold. Fixed in v4.21 by hiding `#setup` inside `showNewSetRotationSetup()`.
-2. **Any new site that un-hides one of the four screens must call `trackScreen()`** or be reachable from the `init()` catch-all. Nothing enforces this structurally — the screens are toggled at ~12 scattered sites rather than through a central `showScreen()` helper. Centralising was considered and deliberately rejected (it means refactoring match-flow code on a scoresheet that must not break mid-match) but invariant 1's bug is the standing argument for doing it if that code is ever touched for other reasons.
+1. **Exactly one of the five screens may be visible at a time.** `trackVisibleScreen()` reports the *first* visible screen in `SCREEN_IDS` order, so two visible screens produce a wrong or phantom pageview. This is not merely an analytics concern: whichever screen is the markup default renders stacked above the real screen whenever a path forgets to hide it. That shipped twice while `#setup` was the default, both the same class: reloading onto the result screen (v4.20), and reloading into the set-2 rotation screen with the rotation screen ~1400px below the fold (through v4.20). **Since the homepage landed, `#home` is the markup default and `#setup` carries `hidden`** — see the homepage section for the consequences of that flip. **`showScreen()` now enforces this structurally** — see the screen-router section below. **One legitimate exception:** while `#setBreakModal` is open, `showSetBreakModal()` has hidden `#scoreboard` as a modal backdrop and **zero** screens are visible. An assertion of "exactly one visible screen" is therefore false during a set break — assert it on screen *entry*, not at arbitrary moments.
+2. **Any new site that shows one of the five screens must call `showScreen(name)`** — never `classList.remove('hidden')` on a screen directly. `showScreen()` hides every other screen *and* calls `trackScreen()` itself, so the DOM and the analytics cannot drift apart, and this is no longer a convention each site has to remember. Corollary: do **not** add a bare `trackScreen()` tail call at a new entry point. `app.js` has exactly **two** `trackScreen()` callers — `showScreen()` and `trackVisibleScreen()` — and that count is itself the invariant.
 
 `sw.js`'s `VERSION` **must** be bumped whenever `index.html` and `app.js` change together. `index.html` is served network-first but `app.js` is cache-first, so without the bump a returning client can run a new `index.html` against a stale cached `app.js` — which for this feature means `send_page_view: false` applies while `trackScreen()` doesn't exist, and the client records **zero** pageviews indefinitely.
+
+### The screen router: `showScreen()`
+
+`showScreen(name)` is the only sanctioned way to change screens. It hides every id in
+`SCREEN_IDS` except `name`, then calls `trackScreen(name)`. It replaced ten scattered toggle
+sites that each hand-listed which siblings to hide — the arrangement that produced both bugs in
+invariant 1 above. It landed as its own behaviour-identical change, before `#home` existed,
+because adding a fifth screen turns every one of those sites into a place that can forget to
+hide the new one.
+
+**Maintenance traps:**
+
+- **Modals are out of scope.** They overlay screens and the v4.24 `MutationObserver` system owns
+  them. Do not route modal visibility through `showScreen()`.
+- **`#rotation1` / `#rotation2` are not screens.** They are `.rotation-grid` panels *inside*
+  `#scoreboard`, and three call sites toggle them independently. Their toggles stay where they
+  are, **after** the `showScreen()` call; `showScreen()` must never touch them.
+- **One deliberate omission. Do not "complete" it.** `showSetBreakModal()` hides `#scoreboard` as
+  a modal backdrop without showing any screen — there is no target screen to pass, and zero
+  visible screens is the correct state for a set break (see invariant 1's exception). Its
+  partner `closeSetBreakModal()` *does* route through `showScreen('scoreboard')`.
+- **Keep the `if (el)` null guard inside `showScreen()`.** Every current `SCREEN_IDS` entry does
+  exist in `index.html`, so the guard is unreachable today — it is there so `SCREEN_IDS` *may*
+  name a screen a given page lacks, and it mirrors the same guard in `trackVisibleScreen()`.
+  Removing it as dead code would break the first caller that relies on that.
+- **`trackVisibleScreen()` at the tail of `init()` is now a pure safety net, not load-bearing.**
+  It stopped covering a unique path when the homepage landed: `routeInitialScreen()` calls
+  `showScreen()` on **both** of its branches, so every entry path already reports for itself.
+  Keep it anyway — nothing structurally stops a future path from un-hiding a screen directly,
+  and the `trackScreen` dedupe makes the redundant call free.
+- **`restoreSavedMatch()`'s `matchOver` branch calls `showScreen('matchResult')` immediately
+  before `endMatch({ fromRestore: true })`, which calls it again. That is not redundant — do not
+  delete it.** `endMatch()` runs two `state.setHistory.reduce(...)` calls *before* it routes, and
+  `loadState()` does no field validation, so corrupted storage throws in those reduces and
+  nothing has hidden `#setup` — the v4.20 stacking bug's exact shape. The second call dedupes on
+  `_currentScreen`, so exactly one page_view still fires. **The obvious-looking alternative —
+  hoisting `showScreen()` to the top of `endMatch()` — is wrong:** on the live path it would move
+  the page_view ahead of `track('match_complete')` and re-attribute the app's most valuable
+  conversion event from the scoreboard URL to the result URL. This is the only place a screen is
+  routed by a *caller* rather than at the screen's own entry point.
+- **`showScreen()` fires the page_view *before* the screen's DOM is populated**, where the old
+  hand-placed tail calls fired after (most visibly in `endMatch()`, now ahead of
+  `renderFinalScore()`). Harmless — `trackScreen()` reads nothing from the DOM or `state`, and
+  `updateAppBarForScreen()` only toggles `#changelogBtn`'s `display` — but don't "restore" the
+  old ordering by re-adding a tail call.
+
+### The homepage (`#home`)
+
+A fifth screen at the canonical URL, shown whenever **no match is in progress**. A restorable
+match always wins and routes to its own screen exactly as before.
+
+- **The gate is `restoreSavedMatch()`'s return value and nothing else.** `routeInitialScreen()`
+  is the authority: `if (!restored) showScreen('home')`. There is deliberately **no**
+  "has used this app before" flag and **no** standalone/installed special case (owner decision,
+  31-Aug-2026). Do not add a `vb-returning` key — it was designed, then cut, because the only
+  question worth asking is whether a match is restorable.
+- **`matchOver` counts as restorable**, so reloading on the result screen shows the result, not
+  the homepage.
+- **`#home` is a `<body>` child, NOT inside `.container`.** `.container` caps at 800px and
+  carries the app-bar top padding — both wrong for a full-width homepage. `showScreen()` stamps
+  `document.body.dataset.screen`, and CSS collapses `.container` (and un-fixes `.credits`) on
+  home. That body attribute is the sanctioned hook for any screen-scoped CSS.
+- **`#setup` now carries `hidden` in the markup and `#home` does not.** `#home` is the
+  default-visible screen, so a crawler or a JS-less load gets real prose instead of a dead form.
+
+**Maintenance traps:**
+
+- **The one sanctioned exception to "never toggle a screen directly".** The stale-cache safety
+  net at the bottom of `index.html` toggles `#home`/`#setup` classes by hand. It has to: it runs
+  precisely when `showScreen()` does **not** exist. `index.html` is served network-first while
+  `app.js` is cache-first, so a returning client can run this HTML against a pre-homepage
+  `app.js` — for one load after a deploy, or forever until `sw.js`'s `VERSION` is bumped. That
+  old `app.js` has no `'home'` in `SCREEN_IDS` and so cannot hide the homepage: mid-match you get
+  the marketing page stacked over a live scoreboard, and as a new visitor an unstyled homepage
+  whose "Start scoring" button has no handler. Its three branches are deliberate —
+  `showScreen` present → return (this page's app.js owns routing); `startMatch` present but
+  `showScreen` absent → old-but-working app.js, fall back to the pre-homepage layout; neither →
+  `app.js` is dead, so leave the homepage's static prose up rather than a form that cannot work.
+  **It also drops `data-entry` unconditionally**, because in that last branch nothing else will,
+  and `#setup` is `hidden` in the markup — the combination is a blank page.
+- **Watch item: `#setup`'s `tabindex="-1"` makes it match `MODAL_INVOKER_SELECTOR`**, which
+  includes a bare `[tabindex]`. `stashModalInvoker()` uses `closest()`, so a pointerdown on the
+  setup panel's own background could in principle stash the *panel* as the modal invoker and
+  return focus there on close. Not reachable today — every modal opener on that screen is a
+  `<button>` in the app bar, which `closest()` matches first — but if you add a modal trigger
+  inside `#setup` that is not itself focusable, check this.
+- **The two-part entry gate.** A synchronous `<head>` script sets `data-entry="app"` on `<html>`
+  when `vb-match-state` exists, and CSS hides `#home` so a restore cannot flash it.
+  `routeInitialScreen()` then **removes that attribute** once `showScreen()` has set the `hidden`
+  class. Deleting the removal permanently hides the homepage from anyone holding a stale,
+  unrestorable `vb-match-state` — presence in storage is not the same as restorable.
+  **Three parts of that function are load-bearing; do not simplify any of them:** the removal
+  sits in a `finally` so it survives a throw in `showScreen()`; the `restoreSavedMatch()` call
+  sits in a `try` because `loadState()` does no field validation, so a corrupt save throws
+  mid-restore and — with `#setup` now `hidden` in the markup — used to paint *nothing at all*;
+  and the `catch` calls `resetMatchState()` so the poisoned key cannot reproduce the failure on
+  every subsequent reload. None of it can help when `app.js` never executes, which is why the
+  stale-cache net above drops the attribute unconditionally.
+- **`.reveal` is double-gated: `html[data-js]` AND `prefers-reduced-motion: no-preference`.**
+  Scroll reveals start at `opacity: 0`, so an ungated failure renders the homepage's prose
+  invisible — destroying the whole reason for putting prose at the canonical URL. Without the
+  motion gate, a reduced-motion user would depend on an observer that never runs for them.
+  **`data-js` is set inside `initHomeReveals()`, immediately before the observer is created —
+  NOT in the `<head>` script.** That placement is the whole point: the head script runs
+  unconditionally, so an attribute set there means only "JS is enabled", which is still true
+  when `app.js` throws — and then all six feature cards and all three steps sit at `opacity: 0`
+  with no observer alive to reveal them. Set where it is, the attribute means "reveals are being
+  managed", which is the condition the hidden start state actually depends on. `initHomeReveals()`
+  also reveals anything already in the viewport synchronously, so arming the gate cannot flash
+  above-the-fold content.
+- **The hero H1 is the page's only `<h1>`.** `.app-brand` in the app bar was demoted to a
+  `<div role="img" aria-label="SpikeSheet">` — it keeps `role="img"` because the wordmark span is
+  `display: none` at ≤360px and the mark is `aria-hidden`, so without it the brand has no
+  accessible name at all. A grep for `<h1` must find exactly one element.
+- **`.home` needs `overflow: clip` on BOTH axes.** `.home-court` is deliberately oversized so its
+  drift cannot expose an edge; with `overflow-x` alone it inflated document height by ~620px.
+- **The desktop demo bleed targets `.demo-widget`, not `#homeDemoRoot`.** The widget carries its
+  own `max-width: 700px; margin: 0 auto`, which silently re-centres it inside the full-bleed rail
+  and cancels the effect. It is intentionally uncapped on ultra-wide: capping produces an awkward
+  small gap instead of a clean bleed.
+- **FAQ `summary` is `display: block`, not flex.** As a flex container the question text became an
+  anonymous flex item with `min-width: auto`, so it could not shrink below its longest word and
+  overflowed by ~4px at 320px. The chevron is positioned out of flow.
+- **`.home-ghost-link` underlines with `text-decoration`, not `border-bottom`.** A border sits on
+  the box, so growing the box to a 44px touch target drags the underline away from the text.
+
+### The hero demo widget (`homeDemo`)
+
+A scripted, self-playing replay of a deciding set's last rallies, inlined in `app.js` as an IIFE
+exposing one global: `window.homeDemo = { init, start, pause, destroy, isPlaying }`.
+
+- **Inlined deliberately.** A separate `home-demo.js`/`.css` would need `APP_SHELL` entries in
+  `sw.js` or it would 404 offline, and this repo keeps all logic in `app.js`.
+- **Isolation is the contract, and a reviewer greps for breaches.** It never reads or writes
+  `state`, never calls `addPoint`/`updateDisplay`/`saveState`/`trackScreen`/`track`, never touches
+  storage, and **every class it creates or queries is `demo-` prefixed** so app restyles and demo
+  restyles cannot collide in either direction. It renders only inside the root passed to `init()`.
+- **`showScreen()` owns its lifecycle:** lazily `init()`-ed the first time `#home` is shown
+  (`init()` is idempotent, so a user who never sees home never builds its DOM) and `pause()`-d on
+  the way to any other screen, so its timers never tick behind the scoreboard.
+- **The demo owns its team colours; it must NOT read `--team1-color`/`--team2-color`.** Those are
+  the *visitor's* colours — `applyTeamColors()` writes them to `:root` and persists them under
+  `vb-team-colors` — so consuming them made the homepage hero change colour depending on what
+  colours the visitor last picked for their own teams, and made the "isolated" demo depend on app
+  state. It now declares `--demo-t1`/`--demo-t2` (+ `-rgb`) on `.demo-widget` itself, which also
+  stops them leaking outward. **These two hex literals are the one sanctioned exception to the
+  tokens-only rule** — a token has to be defined somewhere, exactly as `:root` defines
+  `--team1-color`. Everything else in the demo block still composes off tokens.
+- **The teams are a Haikyuu!! homage** (owner's call): MSBY Black Jackals play black with
+  antique-gold claw markings, so gold is the only usable half of that pair on a dark panel; the
+  Schweiden Adlers are white with royal-blue lettering, lifted for legibility on navy. Real club
+  names are long, so `.demo-teamname` reserves `min-height: 2.2em` — without it a name that wraps
+  on one side only would knock that side's score off the shared baseline.
+- **Edit the replay via the `SCRIPT` array**, not the interpreter. Each beat carries exactly one of
+  `point` / `serve` / `timeout` / `rotate` / `label` / `hold`, with an optional `ms` override.
+- Auto-pauses offscreen (`IntersectionObserver`) and on `visibilitychange`, tracking user intent
+  separately so an automatic resume never overrides an explicit pause. Under
+  `prefers-reduced-motion` it creates **no timers** and renders the final frame statically, and
+  the play/pause control is **hidden** — with no motion there is nothing for it to pause, and a
+  "Replay" button there was provably inert (it re-derived the frame already on screen, so every
+  render branch skipped). WCAG 2.2.2 only asks for a control when something is moving.
+- **`el.hidden` only works here because of the `[hidden] { display: none !important }` rule near
+  the top of `styles.css`.** The UA stylesheet's own `[hidden]` rule loses to any author rule
+  that sets `display`, so `els.toggle.hidden = true` against `.demo-toggle`'s
+  `display: inline-flex` was a silent no-op — the control stayed visible, tab-reachable and
+  inert, which is worse than not having tried. There are exactly **two** `el.hidden` assignments
+  in `app.js` — the demo toggle, and `btn.hidden = true` in the install banner's iOS branch — and
+  **both** only work because of that reset (`.btn` declares `display: flex`, so it would have
+  lost too). Everything else toggles the `.hidden` class (`display: none !important`). If you add
+  another `el.hidden`, that reset rule is what makes it real.
+- The decorative subtree is `aria-hidden="true"` with `.demo-controls` kept outside it, so
+  assistive tech never announces a permanently-present "MATCH POINT" or unlabelled digit changes.
 
 ### Deciding-set side switch
 

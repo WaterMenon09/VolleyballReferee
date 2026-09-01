@@ -8,6 +8,11 @@ A comprehensive web-based volleyball scoresheet application for tracking matches
 
 **[https://watermenon09.github.io/VolleyballReferee/](https://watermenon09.github.io/VolleyballReferee/)**
 
+![The SpikeSheet homepage: the headline "The volleyball scoresheet that knows the rules" above a live scoreboard replaying the end of a deciding set between the MSBY Black Jackals and the Schweiden Adlers](screenshots/homepage.webp)
+
+Opening the app with no match in progress shows this page. If a match *is* in progress, the app
+goes straight back to it — the homepage never gets in the way of a live game.
+
 ## Features
 
 ### Match Setup

@@ -1,4 +1,4 @@
-const VERSION = 'v4.2.4';
+const VERSION = 'v4.2.5';
 const CACHE = `vbref-${VERSION}`;
 // Add every new app-shell asset here or it will not be available offline.
 const APP_SHELL = [
@@ -8,6 +8,16 @@ const APP_SHELL = [
   './app.js',
   './manifest.webmanifest',
   './icons/volleyball.png',
+  // Precached, reversing this plan's original reasoning. §6.3 argued the homepage's images
+  // need no APP_SHELL entry because "installed/offline users skip home" — that stopped being
+  // true when the owner changed the rule (31-Aug-2026) to show the homepage whenever no match
+  // is in progress. An installed user opening the app offline between matches now DOES land on
+  // home, and without this they get a broken image. 23 KB WebP; cheap insurance.
+  //
+  // icons/social-card.png is deliberately NOT here: it is fetched only by crawlers and link
+  // unfurlers, never by the page, so precaching it would add 180 KB to every install for
+  // nothing.
+  './icons/result-screen.webp',
   './fonts/display-600.woff2',
   './fonts/display-800.woff2',
   './fonts/body-400.woff2',

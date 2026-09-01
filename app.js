@@ -117,7 +117,7 @@ const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.24';
+const APP_VERSION = 'v4.25';
 
 // ── Changelog (homepage "What's New" modal) ────────────────────────────────
 // User-facing rewrite of CHANGELOG.md, not a copy of it — the file is developer-toned (internal
@@ -125,6 +125,17 @@ const APP_VERSION = 'v4.24';
 // fetch('./CHANGELOG.md'): fetching would need the raw file added to sw.js's APP_SHELL to work
 // offline, for text nobody but a developer would want to read anyway.
 const CHANGELOG_ENTRIES = [
+    {
+        version: 'v4.25',
+        date: 'Sep 2, 2026',
+        changes: [
+            'SpikeSheet now opens on a welcome page that explains what it does — but only when no match is running. If a match is in progress, the app still goes straight back to it, exactly as before.',
+            'The welcome page shows a live scoreboard replaying the end of a deciding set, so you can see how scoring works before you start.',
+            'A banner on that page offers to add SpikeSheet to your home screen, when your browser supports it. Dismiss it once and it stays gone.',
+            'Pinch-to-zoom works throughout the app again.',
+            'A damaged saved match can no longer strand you: the app discards it and takes you to the welcome page instead.'
+        ]
+    },
     {
         version: 'v4.24',
         date: 'Aug 10, 2026',
@@ -208,27 +219,54 @@ function track(name, params) {
 // engagement time per screen — with no timer code of our own, because GA4 attributes its
 // automatic engagement measurement to the most recent page_view.
 //
-// Deliberately ADDITIVE: every call below is a tail call at a screen's entry point, and no
-// existing line changes. Routing the ~12 scattered `hidden` toggles through a central
-// showScreen() helper would yield identical analytics while refactoring match-flow code on a
-// scoresheet that must not break mid-match. If that refactor is ever wanted it belongs in its
-// own reviewed change, not smuggled in under analytics.
+// Screen entry points do NOT call trackScreen() directly any more. showScreen() (just below
+// trackVisibleScreen) owns both the `hidden` toggling and the page_view, so the two can never
+// disagree about which screen is live. What this replaced: ten scattered toggle sites, each
+// hand-listing its siblings, plus a separately hand-placed tail call at each entry point.
+// To add a screen entry point, call showScreen() — the analytics follow. See its header.
 const SCREEN_TITLES = {
+    home: 'Home',
     setup: 'Setup',
     rotationSetup: 'Rotation Setup',
     scoreboard: 'Scoreboard',
     matchResult: 'Match Result'
 };
-const SCREEN_IDS = ['setup', 'rotationSetup', 'scoreboard', 'matchResult'];
+// 'home' is FIRST deliberately: trackVisibleScreen() reports the first visible screen in
+// this order, and #home is the markup default, so on a fresh load it is the visible one.
+const SCREEN_IDS = ['home', 'setup', 'rotationSetup', 'scoreboard', 'matchResult'];
 let _currentScreen = null;
 
 // A real path per screen, NOT a '#fragment'. GA4 strips everything after '#' when deriving the
 // page-path dimension, so a hash-based location collapses all four screens onto a single row in
 // every path-keyed report and landing-page report. Nothing is ever written to location.hash —
 // this string is reported to GA4 only, so the URL bar and back button are untouched.
-function screenUrl(name) {
+// `isFirst` preserves the landing campaign params on the FIRST virtual pageview only.
+// Every page_view previously reported a clean per-screen path with no query string, so
+// landing-page and campaign reports keyed on page_location saw nothing. (GA4 may still have
+// derived session campaign from the earlier `track('launch')` hit, which gtag stamps with the
+// real document.location — so treat this as fixing page_location-keyed reports, not as proof
+// that all attribution was lost. Unverified against the live property either way.)
+// Later screens stay clean, or the campaign would be re-credited on every screen change.
+// Allowlist, not passthrough. Forwarding location.search verbatim would ship whatever a shared
+// link happens to carry — `?email=...`, a reset token, a session id — into GA4's page_location,
+// which is both a GA4 terms problem and flatly at odds with the homepage FAQ promising that
+// nothing leaves the device. Only attribution params travel.
+const CAMPAIGN_PARAM = /^(utm_[a-z_]+|gclid|gbraid|wbraid|dclid|fbclid|msclkid|ttclid|twclid|igshid|mc_eid|ref|source)$/i;
+function campaignQuery() {
+    try {
+        const keep = new URLSearchParams();
+        new URLSearchParams(location.search).forEach((v, k) => {
+            if (CAMPAIGN_PARAM.test(k)) keep.append(k, v);
+        });
+        const s = keep.toString();
+        return s ? '?' + s : '';
+    } catch (_) { return ''; }
+}
+
+function screenUrl(name, isFirst) {
     const base = location.pathname.replace(/index\.html$/, '');
-    return location.origin + (base.endsWith('/') ? base : base + '/') + name;
+    const path = location.origin + (base.endsWith('/') ? base : base + '/') + name;
+    return isFirst ? path + campaignQuery() : path;
 }
 
 // The changelog button lives in the app bar but only makes sense on the homepage — mid-match
@@ -238,7 +276,7 @@ function screenUrl(name) {
 // restores straight into rotation setup / the scoreboard / the result screen.
 function updateAppBarForScreen(name) {
     const btn = document.getElementById('changelogBtn');
-    if (btn) btn.style.display = name === 'setup' ? '' : 'none';
+    if (btn) btn.style.display = (name === 'home' || name === 'setup') ? '' : 'none';
 }
 
 function trackScreen(name) {
@@ -247,11 +285,14 @@ function trackScreen(name) {
     // otherwise land as a fresh page_view, inflating views and chopping engagement time into
     // meaningless slices.
     if (name === _currentScreen) return;
+    // Captured BEFORE the assignment below: null means nothing has been reported yet, i.e. this
+    // is the landing hit and the one that must carry the campaign query string.
+    const isFirst = _currentScreen === null;
     _currentScreen = name;
     updateAppBarForScreen(name);
 
     const page_title = SCREEN_TITLES[name] || name;
-    const page_location = screenUrl(name);
+    const page_location = screenUrl(name, isFirst);
 
     // gtag('set', ...) BEFORE the event, deliberately. Event-scoped params apply only to their
     // own event, so without this GA4's automatic user_engagement hits — the ones that actually
@@ -267,14 +308,66 @@ function trackScreen(name) {
     track('page_view', { page_title, page_location });
 }
 
-// For paths with no single named entry point — notably every restoreSavedMatch() branch —
-// report whichever screen actually ended up visible.
+// Reports whichever screen actually ended up visible. Since showScreen() landed, every screen
+// transition reports for itself, and routeInitialScreen() calls showScreen() on BOTH of its
+// branches — so as of the homepage there is no longer any entry path this is load-bearing for.
+// Kept as a pure safety net: nothing structurally stops a future path from un-hiding a screen
+// directly, and the trackScreen dedupe makes a redundant call free.
 function trackVisibleScreen() {
     const visible = SCREEN_IDS.find(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
     });
     if (visible) trackScreen(visible);
+}
+
+// ── The screen router ─────────────────────────────────────────────────────────────────
+// The four screens used to be toggled at ten scattered sites, each hand-listing which siblings
+// to hide. Two bugs shipped from a site forgetting one, both the same class: a screen was shown
+// without #setup being hidden, and since #setup carries no `hidden` class in the markup it is
+// the default-visible screen, so the entire setup form rendered ABOVE the real screen.
+//   - v4.20: reloading onto the result screen (restoreSavedMatch's matchOver branch).
+//   - through v4.20: reloading into set-2 rotation setup (~1400px below the fold).
+// showScreen() makes "exactly one screen visible" structural instead of a convention that each
+// site re-implements, and folds in the page_view so the analytics cannot drift from the DOM.
+//
+// Modals are OUT of scope: they overlay screens, and the v4.24 MutationObserver system owns
+// them. Do not route modal visibility through here.
+//
+// ONE deliberate omission, marked at the site: showSetBreakModal() hides #scoreboard as a modal
+// backdrop without showing any screen, so ZERO screens are visible during a set break, by
+// design. It has no target screen and must not become a showScreen() call.
+//
+// Keep the `if (el)` guard. It is unreachable today — every SCREEN_IDS entry exists in
+// index.html — and is there so SCREEN_IDS *may* name a screen a given page lacks; it mirrors the
+// same guard in trackVisibleScreen above. Don't remove it as dead code.
+function showScreen(name) {
+    SCREEN_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('hidden', id !== name);
+    });
+    // Screen-scoped CSS hook. #home needs it because .container caps at 800px and carries
+    // app-bar top padding, both wrong for a full-width homepage — CSS collapses .container
+    // on home rather than restructuring the markup the other four screens live in.
+    document.body.dataset.screen = name;
+    // The demo owns real timers and an IntersectionObserver, so showScreen() owns its
+    // lifecycle: lazily built the first time #home is shown (init() is idempotent, so
+    // re-showing home is free, and a user who never sees home never builds its DOM), and
+    // paused on the way anywhere else so nothing ticks behind the scoreboard.
+    // try/catch because this is decorative and showScreen() is not: a throw in the demo would
+    // otherwise abort the router mid-flight, skipping trackScreen() and — on the entry path —
+    // routeInitialScreen()'s data-entry removal, which strands the user on a blank page.
+    if (window.homeDemo) {
+        try {
+            if (name === 'home') {
+                window.homeDemo.init(document.getElementById('homeDemoRoot'));
+                window.homeDemo.start();
+            } else {
+                window.homeDemo.pause();
+            }
+        } catch (_) { /* a broken hero animation must never cost you the app */ }
+    }
+    trackScreen(name);
 }
 
 window.addEventListener('error', e => {
@@ -916,12 +1009,19 @@ function restoreSavedMatch() {
     let onScoreboard = false;
 
     if (state.matchOver) {
-        // endMatch() shows #matchResult and hides #scoreboard, but NOT #setup — which carries
-        // no `hidden` class in the markup and is therefore the default-visible screen. Every
-        // sibling branch below hides it explicitly; this one did not, so reloading on the
-        // result screen rendered the entire setup form ABOVE the result and read as a reset.
-        document.getElementById('setup').classList.add('hidden');
-        document.getElementById('rotationSetup').classList.add('hidden');
+        // Route BEFORE endMatch(), not just via the showScreen() inside it. endMatch() reads
+        // state.setHistory (two reduces) before it gets there, and loadState() does no field
+        // validation — externally corrupted storage throws in those reduces, and then nothing
+        // has hidden #setup, which carries no `hidden` class in the markup. Without this line
+        // the throw leaves the setup form as the ONLY visible screen with #matchResult still
+        // hidden — the v4.20 bug's shape — so the hide stays unconditional here. endMatch()'s own
+        // showScreen('matchResult') then dedupes via _currentScreen, so exactly one page_view
+        // still fires.
+        //
+        // Deliberately NOT fixed by hoisting showScreen() to the top of endMatch(): on the live
+        // path that would move the page_view ahead of track('match_complete'), re-attributing
+        // that event from the scoreboard URL to the result URL.
+        showScreen('matchResult');
         endMatch({ fromRestore: true });
     } else if (!inProgress) {
         return false;
@@ -931,10 +1031,9 @@ function restoreSavedMatch() {
         showRotationSetup();
         return true;
     } else if (state.hasRotation && state.team1Rotation.length === 6) {
-        document.getElementById('setup').classList.add('hidden');
-        document.getElementById('rotationSetup').classList.add('hidden');
-        document.getElementById('scoreboard').classList.remove('hidden');
-        document.getElementById('matchResult').classList.add('hidden');
+        showScreen('scoreboard');
+        // #rotation1/#rotation2 are panels INSIDE #scoreboard, not screens. showScreen() must
+        // never touch them; they stay here, after it.
         document.getElementById('rotation1').classList.remove('hidden');
         document.getElementById('rotation2').classList.remove('hidden');
         updateDisplay();
@@ -943,10 +1042,7 @@ function restoreSavedMatch() {
         _restoredRotationSetup = savedRS || null;
         showNewSetRotationSetup();
     } else {
-        document.getElementById('setup').classList.add('hidden');
-        document.getElementById('rotationSetup').classList.add('hidden');
-        document.getElementById('scoreboard').classList.remove('hidden');
-        document.getElementById('matchResult').classList.add('hidden');
+        showScreen('scoreboard');
         document.getElementById('rotation1').classList.add('hidden');
         document.getElementById('rotation2').classList.add('hidden');
         updateDisplay();
@@ -968,7 +1064,14 @@ function init() {
     loadSettings();
     track('launch', { display_mode: getDisplayMode(), online: navigator.onLine });
     initWebVitals();
-    window.addEventListener('appinstalled', () => track('pwa_installed'));
+    window.addEventListener('appinstalled', () => {
+        track('pwa_installed');
+        // The offer is spent. Hide it and remember, so a browser tab left open next to the
+        // freshly installed app does not keep advertising an install.
+        const b = document.getElementById('homeInstall');
+        if (b) b.classList.add('hidden');
+        try { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); } catch (_) {}
+    });
 
     // Restore saved team colors
     try {
@@ -1118,14 +1221,549 @@ function init() {
     document.addEventListener('keydown', handleModalKeydown, true);
     MODAL_IDS.forEach(id => observeModalVisibility(document.getElementById(id)));
 
-    restoreSavedMatch();
+    initHome();
+    routeInitialScreen();
 
-    // Catch-all AFTER restore: covers the default landing on #setup and every restoreSavedMatch()
-    // branch that routes to a screen without a named entry point. Branches that do have one
-    // (endMatch, showRotationSetup, showNewSetRotationSetup) have already reported, and the
-    // trackScreen dedupe swallows this call for them.
+    // Pure safety net now: routeInitialScreen() calls showScreen() on BOTH branches, so every
+    // entry path has already reported. Kept because nothing structurally prevents a future
+    // path from un-hiding a screen without showScreen(), and the trackScreen dedupe makes a
+    // redundant call free.
     trackVisibleScreen();
 }
+
+// The homepage gate. A match in progress always wins; everyone else gets the homepage —
+// including returning users and installed/standalone launches (owner decision, 31-Aug-2026:
+// "homepage should always show unless a preexisting match was running"). There is deliberately
+// NO 'has used this app before' flag: the only question asked is whether a match is restorable.
+function routeInitialScreen() {
+    let restored = false;
+    try {
+        restored = restoreSavedMatch();
+    } catch (err) {
+        // loadState() does NO field validation, so a corrupt or hand-edited vb-match-state can
+        // throw anywhere inside restore — e.g. `team1Players: null` throws on the .length read
+        // at the top. Before the homepage landed, that was survivable: #setup was the markup
+        // default, so the user still got a usable form. Now #setup carries `hidden`, so an
+        // unhandled throw here paints NOTHING, and the bad key reproduces it on every reload.
+        // Drop the poisoned state so the next load is clean, and fall through to the homepage.
+        try { resetMatchState(); } catch (_) {}
+        restored = false;
+        track('js_error', {
+            message: 'restore failed: ' + String((err && err.message) || err).slice(0, 140),
+            source: 'routeInitialScreen',
+            line: 0
+        });
+    }
+    try {
+        if (!restored) showScreen('home');
+    } finally {
+        // MUST run even if showScreen() throws. While data-entry is set the gate's own rule
+        // hides #home, and #setup is `hidden` in the markup — so skipping this leaves the page
+        // with no visible screen at all. This is the recovery path for a stale-but-
+        // unrestorable vb-match-state, which suppresses #home pre-JS and then routes here.
+        document.documentElement.removeAttribute('data-entry');
+    }
+    return restored;
+}
+
+// ── Homepage (#home) ──────────────────────────────────────────────────────────────
+// Entirely additive: no match-flow function behaves differently because this exists. The
+// only touchpoints are showScreen() (which owns #home like any other screen) and init().
+function initHome() {
+    // The bottom CTA sits ~4 screens down; without resetting scroll, #setup would open
+    // mid-page. Done here rather than in showScreen() so the four match screens keep
+    // their existing scroll behaviour untouched.
+    const startScoring = () => {
+        window.scrollTo(0, 0);
+        showScreen('setup');
+        // Move focus to the new screen. Without this, activating a <button> leaves focus on a
+        // now-hidden element, so a keyboard user's next Tab restarts from the app bar. Focus
+        // the panel rather than its first input: an input would pop the on-screen keyboard on
+        // a phone, which is the wrong first impression for a form you have not read yet.
+        const panel = document.getElementById('setup');
+        if (panel) panel.focus({ preventScroll: true });
+        track('home_start_scoring');
+    };
+    ['homeStartBtn', 'homeStartBtn2'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.addEventListener('click', startScoring);
+    });
+
+    const cl = document.getElementById('homeChangelogLink');
+    if (cl) cl.addEventListener('click', openChangelogModal);
+
+    const fb = document.getElementById('homeFeedbackLink');
+    if (fb) fb.addEventListener('click', openFeedbackModal);
+
+    renderHomeWhatsNew();
+    initHomeReveals();
+    initInstallBanner();
+}
+
+// ── Install banner ────────────────────────────────────────────────────────────────
+// Deliberately pessimistic: the banner stays hidden unless there is a real offer behind it.
+// Chromium fires `beforeinstallprompt` only when the app actually qualifies, so gating on the
+// event means the Install button can never be a dead end. iOS/Safari never fires it at all, so
+// there the banner is copy-only — the share-sheet route is the only truthful instruction.
+//
+// §11 forbids install nagging: ONE dismissible banner, and the dismissal sticks. The key keeps
+// the `vb-` prefix like every other key in this app; never rename an existing one.
+const INSTALL_DISMISSED_KEY = 'vb-install-dismissed';
+let _deferredInstallPrompt = null;
+
+function isIosSafari() {
+    // iPadOS 13+ reports as a Mac, so the touch-point check is not optional.
+    const ua = navigator.userAgent || '';
+    const iosLike = /iPhone|iPad|iPod/.test(ua)
+        || (/Macintosh/.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
+    return iosLike && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+}
+
+function initInstallBanner() {
+    const banner = document.getElementById('homeInstall');
+    if (!banner) return;
+
+    // Already installed: there is nothing to offer, and a courtside phone must never see this.
+    const mode = getDisplayMode();
+    if (mode === 'standalone' || mode === 'standalone-ios' || mode === 'fullscreen') return;
+
+    let dismissed = false;
+    try { dismissed = localStorage.getItem(INSTALL_DISMISSED_KEY) === '1'; } catch (_) {}
+    if (dismissed) return;
+
+    const btn = document.getElementById('homeInstallBtn');
+    const dismiss = document.getElementById('homeInstallDismiss');
+
+    const reveal = () => banner.classList.remove('hidden');
+
+    dismiss.addEventListener('click', () => {
+        banner.classList.add('hidden');
+        try { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); } catch (_) {}
+        track('install_banner_dismissed');
+    });
+
+    if (isIosSafari()) {
+        // No programmatic install exists here, so do not show a button that cannot work.
+        btn.hidden = true;
+        document.getElementById('homeInstallCopy').textContent =
+            'Tap the Share button, then “Add to Home Screen”. It then opens like any other app '
+            + 'and scores a full match with no signal.';
+        reveal();
+        track('install_banner_shown', { kind: 'ios' });
+        return;
+    }
+
+    window.addEventListener('beforeinstallprompt', e => {
+        // Suppress the browser's own mini-infobar so this banner is the single offer.
+        e.preventDefault();
+        _deferredInstallPrompt = e;
+        reveal();
+        track('install_banner_shown', { kind: 'prompt' });
+    });
+
+    btn.addEventListener('click', async () => {
+        if (!_deferredInstallPrompt) return;
+        const prompt = _deferredInstallPrompt;
+        // A deferred prompt is single-use: null it before awaiting so a double-tap cannot
+        // call prompt() twice, which throws.
+        _deferredInstallPrompt = null;
+        // Retire the button HERE, before the await — not after it. The offer is spent the moment
+        // the prompt is consumed, and `userChoice` is not guaranteed to settle promptly (it does
+        // not in a headless browser at all), so anything downstream of the await may never run.
+        // Deliberately never re-enabled: a deferred prompt is single-use and Chromium does not
+        // re-fire `beforeinstallprompt` in the same page session, so re-enabling would leave a
+        // button that looks live and silently does nothing on every subsequent click. The banner
+        // stays up because the browser menu is still a route in.
+        btn.disabled = true;
+        btn.title = 'Use your browser\u2019s menu to install';
+        try {
+            prompt.prompt();
+            const choice = await prompt.userChoice;
+            track('install_prompt_result', { outcome: (choice && choice.outcome) || 'unknown' });
+            if (choice && choice.outcome === 'accepted') banner.classList.add('hidden');
+        } catch (_) {
+            /* user gesture expired or the prompt was already consumed — nothing to recover */
+        }
+    });
+}
+
+// Reuses CHANGELOG_ENTRIES — the array the in-app "What's new" panel already renders, already
+// written for referees rather than developers. Zero new infrastructure, and it cannot go stale
+// independently of the panel. Shows the headline change per release, not the full list.
+function renderHomeWhatsNew() {
+    const el = document.getElementById('homeWhatsNew');
+    if (!el || typeof CHANGELOG_ENTRIES === 'undefined') return;
+    el.innerHTML = CHANGELOG_ENTRIES.slice(0, 3).map(entry => `
+        <div class="home-news-item">
+            <div class="home-news-head">
+                <span class="home-news-ver">${escapeHtml(entry.version)}</span>
+                <span class="home-news-date">${escapeHtml(entry.date)}</span>
+            </div>
+            <p>${escapeHtml((entry.changes && entry.changes[0]) || '')}</p>
+        </div>`).join('');
+}
+
+// Scroll reveals. The hidden start state lives behind html[data-js] AND
+// prefers-reduced-motion: no-preference in CSS, so if this never runs — no JS, an error, or a
+// reduced-motion user — the content is simply visible. Nothing here is load-bearing for
+// legibility, which is the point.
+function initHomeReveals() {
+    const items = document.querySelectorAll('#home .reveal');
+    if (!items.length) return;
+    if (!('IntersectionObserver' in window)
+            || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        items.forEach(el => el.classList.add('is-in'));
+        return;
+    }
+    // Arm the hidden start state HERE, not in the <head> script. That script runs
+    // unconditionally, so the attribute could only ever distinguish "JS disabled" from "JS
+    // enabled" — never "JS enabled but app.js threw", which left all six feature cards and all
+    // three steps at opacity 0 with no observer alive to reveal them. Setting it at the moment
+    // the observer is created makes the attribute mean exactly "reveals are being managed".
+    document.documentElement.setAttribute('data-js', '1');
+    // Reveal whatever is already on screen in this same frame, so arming the gate cannot
+    // flash above-the-fold content out and back in.
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    items.forEach(el => { if (el.getBoundingClientRect().top < vh) el.classList.add('is-in'); });
+
+    const io = new IntersectionObserver((entries, obs) => {
+        entries.forEach(e => {
+            if (!e.isIntersecting) return;
+            e.target.classList.add('is-in');
+            obs.unobserve(e.target);          // one-shot; never re-hide on scroll up
+        });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    items.forEach(el => io.observe(el));
+}
+
+// ── The hero demo widget ──────────────────────────────────────────────────────────
+// Inlined rather than a separate home-demo.js: this repo keeps all logic in app.js, and a
+// second file would need an APP_SHELL entry in sw.js to survive offline.
+//
+// HARD ISOLATION — a reviewer greps for breaches, so keep them true:
+//   * it never reads or writes `state`, never calls addPoint/updateDisplay/saveState/
+//     trackScreen/track, and never touches localStorage;
+//   * every class it creates or queries is `demo-` prefixed, so app restyles and demo
+//     restyles cannot collide in either direction;
+//   * it renders only inside the root element handed to init().
+// Its lifecycle is owned by showScreen(): lazily init'd the first time #home is shown, and
+// paused on the way to any other screen so its timers never run behind the scoreboard.
+/*!
+ * home-demo.js — SpikeSheet self-playing scoreboard demo (isolated widget)
+ * Public API: window.homeDemo = { init(rootEl), start(), pause(), destroy(), isPlaying() }
+ * Never touches the host app's shared game object, never calls any of its
+ * render/persistence/analytics functions, never reads/writes browser storage.
+ * Every class here is prefixed `demo-`; it renders only inside init()'s root.
+ */
+(function (global) {
+  'use strict';
+  if (global.homeDemo) { return; }
+
+  /* SCRIPT — edit the replay here; nothing below needs to change when you do.
+   * Each beat has exactly ONE of:
+   *   point:1|2 (score++)  serve:1|2 (side-out move)  timeout:1|2 (chip)
+   *   rotate:1|2 (chip)  label:string ('' hides the match-point banner)
+   *   hold:ms (no visual change, just wait)
+   * Optional `ms` on any beat overrides its default hold time (BEAT_MS).
+   * The array replays from the top every loop, after a ~3s final hold. */
+  var SCRIPT = [
+    { hold: 900 },                    // opening frame: 12–12
+    { point: 1 },                     // 13–12
+    { hold: 650 },
+    { point: 2 },                     // 13–13
+    { serve: 2 },                     // side-out, Team B to serve
+    { hold: 500 },
+    { timeout: 1, ms: 1900 },         // Team A timeout
+    { point: 1 },                     // 14–13
+    { serve: 1 },                     // side-out, Team A to serve
+    { rotate: 1, ms: 800 },           // Team A rotates
+    { hold: 550 },
+    { point: 2 },                     // 14–14
+    { serve: 2 },
+    { hold: 500 },
+    { point: 1 },                     // 15–14
+    { serve: 1 },
+    { hold: 500 },
+    { label: 'MATCH POINT' },
+    { hold: 1300 },
+    { point: 1 },                     // 16–14, match point converted
+    { hold: 350 },
+    { label: '' },                    // clear banner for the next loop
+    { hold: 3000 }                    // hold on the finished score
+  ];
+
+  var BEAT_MS = { point: 950, serve: 550, timeout: 1500, rotate: 700, label: 950 };
+  var INITIAL = { score1: 12, score2: 12, serve: 1 };
+
+  /* One source of truth for the two clubs. The rename previously touched only TEMPLATE, so the
+     event chip went on announcing "TEAM A · TIMEOUT" beside panels reading "MSBY Black Jackals"
+     — in the hero, above the fold. Chips use the short name because the feed row is narrow. */
+  var TEAMS = {
+    1: { full: 'MSBY Black Jackals', short: 'MSBY' },
+    2: { full: 'Schweiden Adlers',   short: 'Schweiden' }
+  };
+
+  var TEMPLATE =
+    '<div class="demo-widget">' +
+      '<div class="demo-visual" aria-hidden="true">' +
+        '<span class="demo-setlabel">SET 5</span>' +
+        '<div class="demo-servetrack"><div class="demo-servedot" data-side="1"></div></div>' +
+        '<div class="demo-court">' +
+          '<div class="demo-panel demo-panel--t1"><div class="demo-teamname">' + TEAMS[1].full + '</div>' +
+            '<div class="demo-score" data-score="1">12</div></div>' +
+          '<div class="demo-panel demo-panel--t2"><div class="demo-teamname">' + TEAMS[2].full + '</div>' +
+            '<div class="demo-score" data-score="2">12</div></div>' +
+        '</div>' +
+        '<div class="demo-feed"><div class="demo-chip"></div></div>' +
+        '<div class="demo-matchpoint">MATCH POINT</div>' +
+      '</div>' +
+      '<div class="demo-controls">' +
+        '<button type="button" class="demo-toggle" aria-label="Pause scoreboard demo">' +
+          '<span class="demo-toggle-icon" aria-hidden="true"></span>' +
+          '<span class="demo-toggle-label">Pause</span>' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+
+  function keyOf(beat) {
+    if ('point' in beat) return 'point';
+    if ('serve' in beat) return 'serve';
+    if ('timeout' in beat) return 'timeout';
+    if ('rotate' in beat) return 'rotate';
+    if ('label' in beat) return 'label';
+    return 'hold';
+  }
+
+  function delayOf(beat) {
+    if (typeof beat.ms === 'number') return beat.ms;
+    if ('hold' in beat) return beat.hold || 1000;
+    return BEAT_MS[keyOf(beat)] || 800;
+  }
+
+  function homeDemo() {
+    var root = null, els = {}, initialized = false, destroyed = false;
+    var timerId = null, beatIndex = 0, runtime = null;
+    var rendered = { score1: null, score2: null, serve: null, chip: null, label: null };
+    var intentPlaying = false, offscreen = true, tabHidden = false, reducedMotion = false;
+    var mql = null, io = null;
+
+    function isAutoSuspended() { return offscreen || tabHidden; }
+    function effectivePlaying() { return intentPlaying && !isAutoSuspended() && !reducedMotion; }
+
+    function resetRuntime() {
+      runtime = { score1: INITIAL.score1, score2: INITIAL.score2, serve: INITIAL.serve, chip: null, label: '' };
+    }
+
+    function applyBeat(beat) {
+      runtime.chip = null;
+      var k = keyOf(beat);
+      if (k === 'point') runtime['score' + beat.point] += 1;
+      else if (k === 'serve') runtime.serve = beat.serve;
+      else if (k === 'timeout') runtime.chip = { team: beat.timeout, text: 'TIMEOUT' };
+      else if (k === 'rotate') runtime.chip = { team: beat.rotate, text: 'ROTATION' };
+      else if (k === 'label') runtime.label = beat.label || '';
+    }
+
+    function pulse(el) {
+      el.classList.remove('demo-pulse');
+      void el.offsetWidth; /* reflow so the animation retriggers */
+      el.classList.add('demo-pulse');
+    }
+
+    function render() {
+      if (runtime.score1 !== rendered.score1) {
+        els.score1.textContent = String(runtime.score1);
+        if (rendered.score1 !== null) pulse(els.score1);
+        rendered.score1 = runtime.score1;
+      }
+      if (runtime.score2 !== rendered.score2) {
+        els.score2.textContent = String(runtime.score2);
+        if (rendered.score2 !== null) pulse(els.score2);
+        rendered.score2 = runtime.score2;
+      }
+      if (runtime.serve !== rendered.serve) {
+        els.servedot.setAttribute('data-side', String(runtime.serve));
+        rendered.serve = runtime.serve;
+      }
+      var chipKey = runtime.chip ? (runtime.chip.team + runtime.chip.text) : null;
+      if (chipKey !== rendered.chip) {
+        if (runtime.chip) {
+          els.chip.textContent = TEAMS[runtime.chip.team].short + ' · ' + runtime.chip.text;
+          els.chip.setAttribute('data-team', String(runtime.chip.team));
+          els.feed.classList.add('demo-feed--visible');
+        } else {
+          els.feed.classList.remove('demo-feed--visible');
+        }
+        rendered.chip = chipKey;
+      }
+      if (runtime.label !== rendered.label) {
+        els.matchpoint.classList.toggle('demo-matchpoint--visible', !!runtime.label);
+        rendered.label = runtime.label;
+      }
+    }
+
+    function clearTimer() {
+      if (timerId !== null) { global.clearTimeout(timerId); timerId = null; }
+    }
+
+    function schedule(delay) {
+      clearTimer();
+      if (!effectivePlaying()) return;
+      timerId = global.setTimeout(tick, delay);
+    }
+
+    function tick() {
+      timerId = null;
+      if (beatIndex === 0) resetRuntime();
+      var beat = SCRIPT[beatIndex];
+      applyBeat(beat);
+      render();
+      beatIndex = (beatIndex + 1) % SCRIPT.length;
+      schedule(delayOf(beat));
+    }
+
+    function renderStaticFinalFrame() {
+      resetRuntime();
+      runtime.score1 = 16; runtime.score2 = 14; runtime.serve = 1;
+      beatIndex = 0;
+      render();
+    }
+
+    function updateToggleUi() {
+      // Under reduced motion there is no motion, so WCAG 2.2.2 asks for no control — and a
+      // "Replay" button here was provably inert (renderStaticFinalFrame() re-derives the frame
+      // already on screen, so every render branch skipped and nothing changed). Hide it rather
+      // than ship a control that advertises an action it cannot perform. The media-query
+      // listener re-renders, so flipping the OS setting brings it back.
+      //
+      // This line DEPENDS on the `[hidden] { display: none !important }` rule near the top of
+      // styles.css. Without it the UA's own [hidden] rule loses to `.demo-toggle`'s
+      // `display: inline-flex` and this assignment is a silent no-op — which is exactly how it
+      // shipped once. Do not remove that rule.
+      els.toggle.hidden = reducedMotion;
+      // The label tracks the user's INTENT, not the effective state. While auto-suspended
+      // (scrolled offscreen, tab hidden) the controls can still be on screen; showing "Play"
+      // there advertises an action that looks broken, because start() sets intent but the
+      // suspend gate legitimately withholds the timer until the widget is back in view.
+      var shown = intentPlaying && !reducedMotion;
+      els.toggle.classList.toggle('demo-toggle--playing', shown);
+      els.toggleLabel.textContent = shown ? 'Pause' : 'Play';
+      els.toggle.setAttribute('aria-label', shown
+        ? 'Pause scoreboard demo'
+        : 'Play scoreboard demo');
+    }
+
+    /* Under reduced motion the control is hidden (see updateToggleUi), so this branch is
+     * only reachable via a programmatic .click() — the `hidden` attribute does not block one.
+     * Kept as a guard so such a call can never start a timer for a user who asked for no
+     * motion; it deliberately does nothing else. */
+    function onToggleClick() {
+      if (reducedMotion) { renderStaticFinalFrame(); return; }
+      if (intentPlaying) pause(); else start();
+    }
+
+    function onSuspendChange() {
+      if (isAutoSuspended()) clearTimer();
+      else if (intentPlaying && !reducedMotion && timerId === null) schedule(0);
+      updateToggleUi();
+    }
+
+    function onVisibility() {
+      tabHidden = !!global.document.hidden;
+      onSuspendChange();
+    }
+
+    function onReducedMotionChange() {
+      reducedMotion = mql.matches;
+      if (reducedMotion) { clearTimer(); renderStaticFinalFrame(); }
+      else if (intentPlaying) { schedule(0); }
+      updateToggleUi();
+    }
+
+    function buildDom(rootEl) {
+      rootEl.innerHTML = TEMPLATE;
+      var w = rootEl.firstElementChild;
+      els.score1 = w.querySelector('[data-score="1"]');
+      els.score2 = w.querySelector('[data-score="2"]');
+      els.servedot = w.querySelector('.demo-servedot');
+      els.feed = w.querySelector('.demo-feed');
+      els.chip = w.querySelector('.demo-chip');
+      els.matchpoint = w.querySelector('.demo-matchpoint');
+      els.toggle = w.querySelector('.demo-toggle');
+      els.toggleLabel = w.querySelector('.demo-toggle-label');
+      els.toggle.addEventListener('click', onToggleClick);
+    }
+
+    function init(rootEl) {
+      if (initialized || !rootEl || rootEl.nodeType !== 1) return;
+      initialized = true;
+      destroyed = false;
+      root = rootEl;
+      buildDom(root);
+
+      mql = (typeof global.matchMedia === 'function') ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      reducedMotion = !!(mql && mql.matches);
+      if (mql) {
+        if (mql.addEventListener) mql.addEventListener('change', onReducedMotionChange);
+        else if (mql.addListener) mql.addListener(onReducedMotionChange);
+      }
+
+      if (typeof global.IntersectionObserver === 'function') {
+        io = new global.IntersectionObserver(function (entries) {
+          offscreen = !entries[0].isIntersecting;
+          onSuspendChange();
+        }, { threshold: 0.15 });
+        io.observe(root);
+      } else {
+        offscreen = false; /* no IO support: assume visible */
+      }
+
+      tabHidden = !!global.document.hidden;
+      global.document.addEventListener('visibilitychange', onVisibility);
+
+      if (reducedMotion) { renderStaticFinalFrame(); }
+      else { resetRuntime(); render(); start(); }
+      updateToggleUi();
+    }
+
+    function start() {
+      if (!initialized || destroyed) return;
+      intentPlaying = true;
+      if (!reducedMotion && !isAutoSuspended() && timerId === null) schedule(0);
+      updateToggleUi();
+    }
+
+    function pause() {
+      if (!initialized || destroyed) return;
+      intentPlaying = false;
+      clearTimer();
+      updateToggleUi();
+    }
+
+    function isPlaying() { return initialized && !destroyed && effectivePlaying(); }
+
+    function destroy() {
+      if (!initialized || destroyed) return;
+      destroyed = true;
+      clearTimer();
+      if (io) { io.disconnect(); io = null; }
+      global.document.removeEventListener('visibilitychange', onVisibility);
+      if (mql) {
+        if (mql.removeEventListener) mql.removeEventListener('change', onReducedMotionChange);
+        else if (mql.removeListener) mql.removeListener(onReducedMotionChange);
+      }
+      if (els.toggle) els.toggle.removeEventListener('click', onToggleClick);
+      if (root) root.innerHTML = '';
+      els = {};
+      initialized = false;
+    }
+
+    return { init: init, start: start, pause: pause, destroy: destroy, isPlaying: isPlaying };
+  }
+
+  global.homeDemo = homeDemo();
+})(window);
+
 
 function toggleService() {
     if (state.currentSetPoints.length === 0) {
@@ -1262,7 +1900,10 @@ function showSetBreakModal(setNumber) {
 
     titleDisplay.textContent = `Set ${setNumber - 1} Complete - Break Time`;
     
-    // Hide scoreboard to prevent background visibility
+    // Hide the scoreboard behind the modal. DELIBERATE OMISSION from the showScreen() refactor
+    // — do NOT "complete" it into a showScreen() call. There is no target screen: while
+    // this modal is open ZERO screens are visible, by design. The partner show is
+    // closeSetBreakModal(), which does route through showScreen('scoreboard').
     document.getElementById('scoreboard').classList.add('hidden');
     modal.classList.remove('hidden');
 
@@ -1307,7 +1948,7 @@ function closeSetBreakModal() {
     if (state.hasRotation) {
         showNewSetRotationSetup();
     } else {
-        document.getElementById('scoreboard').classList.remove('hidden');
+        showScreen('scoreboard');
         updateDisplay();
     }
 }
@@ -2376,8 +3017,7 @@ function handleModalKeydown(e) {
 }
 
 function showRotationSetup() {
-    document.getElementById('setup').classList.add('hidden');
-    document.getElementById('rotationSetup').classList.remove('hidden');
+    showScreen('rotationSetup');
 
     document.getElementById('rotationTeam1Name').textContent = state.team1Name;
     document.getElementById('rotationTeam2Name').textContent = state.team2Name;
@@ -2407,22 +3047,16 @@ function showRotationSetup() {
     document.getElementById('rotationSetupSetScore').classList.add('hidden');
     updatePrevRotationButtons();
     initDragAndDrop();
-    trackScreen('rotationSetup');
 }
 
 function showNewSetRotationSetup() {
     state.team1Rotation = [];
     state.team2Rotation = [];
     saveState();
-    // #setup carries no `hidden` class in the markup, so it is the default-visible screen on a
-    // fresh page. Mid-match some earlier transition has already hidden it — but on a RELOAD
-    // straight into this screen (restoreSavedMatch's `hasRotation` branch) nothing has, and the
-    // whole setup form renders ABOVE the rotation screen, pushing it below the fold. Same bug
-    // class as the matchOver branch documented in restoreSavedMatch(). Hiding it here fixes
-    // every caller at once, and is a harmless no-op when it is already hidden.
-    document.getElementById('setup').classList.add('hidden');
-    document.getElementById('scoreboard').classList.add('hidden');
-    document.getElementById('rotationSetup').classList.remove('hidden');
+    // Reloading straight into this screen used to render the whole setup form above it, pushing
+    // the rotation screen ~1400px below the fold; v4.21 fixed it by hiding #setup here, and
+    // showScreen() now makes it structural rather than a hide this function has to remember.
+    showScreen('rotationSetup');
 
     document.getElementById('rotationTeam1Name').textContent = state.team1Name;
     document.getElementById('rotationTeam2Name').textContent = state.team2Name;
@@ -2454,7 +3088,6 @@ function showNewSetRotationSetup() {
     scoreDisplay.innerHTML = `Match Score: <strong>${escapeHtml(state.team1Name)}</strong> ${state.team1Sets} - ${state.team2Sets} <strong>${escapeHtml(state.team2Name)}</strong>`;
     updatePrevRotationButtons();
     initDragAndDrop();
-    trackScreen('rotationSetup');
 }
 
 function updatePrevRotationButtons() {
@@ -2602,15 +3235,12 @@ function confirmRotationSetup() {
     rotationSetupState.team1Rotation = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
     rotationSetupState.team2Rotation = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
 
-    document.getElementById('rotationSetup').classList.add('hidden');
-    
     if (rotationSetupState.isNewSet) {
         // Continue existing match with new set rotations
         // Don't call beginMatch() as it would reset match state
         // Just show scoreboard and update display with new rotations
-        document.getElementById('scoreboard').classList.remove('hidden');
+        showScreen('scoreboard');
         updateDisplay();
-        trackScreen('scoreboard');
     } else {
         // Start a new match - this will reset state and set up all UI elements
         beginMatch();
@@ -2647,10 +3277,7 @@ function beginMatch() {
     state.team1Timeouts = state.rules.timeoutsPerSet;
     state.team2Timeouts = state.rules.timeoutsPerSet;
 
-    document.getElementById('setup').classList.add('hidden');
-    document.getElementById('rotationSetup').classList.add('hidden');
-    document.getElementById('scoreboard').classList.remove('hidden');
-    document.getElementById('matchResult').classList.add('hidden');
+    showScreen('scoreboard');
 
     if (!state.hasRotation) {
         document.getElementById('rotation1').classList.add('hidden');
@@ -2659,8 +3286,6 @@ function beginMatch() {
         document.getElementById('rotation1').classList.remove('hidden');
         document.getElementById('rotation2').classList.remove('hidden');
     }
-
-    trackScreen('scoreboard');
 
     track('match_start', {
         match_type: state.matchType,
@@ -2718,12 +3343,8 @@ function resetMatchState() {
 
 function resetToSetup() {
     releaseWakeLock();
-    document.getElementById('setup').classList.remove('hidden');
-    document.getElementById('scoreboard').classList.add('hidden');
-    document.getElementById('matchResult').classList.add('hidden');
-    document.getElementById('rotationSetup').classList.add('hidden');
+    showScreen('setup');
     resetMatchState();
-    trackScreen('setup');
 }
 
 function isDeciderSet() {
@@ -3030,14 +3651,13 @@ function endMatch({ fromRestore = false } = {}) {
         releaseWakeLock();
     }
 
-    document.getElementById('scoreboard').classList.add('hidden');
-    document.getElementById('matchResult').classList.remove('hidden');
+    // Fires the page_view on the restore path too, and should: reloading onto the result screen
+    // IS a view of it.
+    showScreen('matchResult');
 
     document.getElementById('winner').textContent = `${winner} Wins!`;
 
     renderFinalScore(fromRestore);
-    // Fires on the restore path too, and should: reloading onto the result screen IS a view of it.
-    trackScreen('matchResult');
 }
 
 // v4.20 T1: semantic box-score table (replaces the .set-results-row pill row).
