@@ -49,6 +49,12 @@ deploy time is the whole point: it buys the bytes without paying the maintenance
 - **`index.html` and `sw.js` are deliberately NOT minified.** `index.html` carries inline scripts
   (the entry gate, the stale-cache net) where the risk outweighs a few hundred bytes; `sw.js` is
   ~2.5 KB and cache-busts everything else, so minifying it buys nothing.
+- **Measure Core Web Vitals with `--throttling-method=devtools`, never Lighthouse's default.**
+  The default is `simulate`: it loads on the real connection and *models* slow-4G + 4×CPU. That
+  mode sent this project chasing a 4.6 s LCP and a "2,899 ms element render delay" that do not
+  exist — measured, LCP is 1.6 s, equal to FCP, on the static `h1.home-h1` (confirmed from
+  Lighthouse's own trace). It also scored 79 and 84 on identical builds, so two simulate runs
+  cannot be compared. Worse, it reports CLS 0.002 where the measured value is **0.160**.
 - **A change to what the deploy emits still needs the `sw.js` VERSION bump**, even when no source
   file changed — `app.js` and `styles.css` are cache-first, so without it returning clients keep
   the previous bytes and never receive the improvement.

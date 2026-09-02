@@ -22,25 +22,25 @@ Closes the one target the v4.25/v4.26 work left unmet. Lighthouse mobile Perform
 - `index.html` and `sw.js` are deliberately **not** minified: the former carries inline scripts (the entry gate, the stale-cache net) where the risk outweighs a few hundred bytes, and the latter is ~2.5 KB and is what cache-busts everything else.
 - `sw.js` `VERSION` → `v4.2.7`. Required even though no source file's behaviour changed: `app.js` and `styles.css` are served cache-first, so without the bump returning clients keep the old bytes and never receive the improvement.
 
-### Outcome — the bytes came off, the score did not move
-Measured against the deployed v4.27: **Lighthouse mobile Performance 79 → 79.** The transfer
-savings are real and confirmed on the wire (`app.js` 25.7 KB, `styles.css` 13.9 KB), FCP improved
-1.9 → 1.6 s, render-blocking fell ~880 → ~570 ms and unused JavaScript 102 → 70 KiB — but the
-score is unchanged, and this entry would be dishonest if it implied otherwise.
+### Outcome — the bytes came off; the problem this release targeted turned out not to exist
+The transfer savings are real and confirmed on the wire (`app.js` 25.7 KB, `styles.css` 13.9 KB), and 41.6 KB less to download on a phone at the side of a court is worth having on its own terms.
 
-The reason is worth recording, because it redirects the remaining work. The score decomposes as
-TBT 30/30, CLS 25/25 and FCP 9.4/10 — all effectively maxed — against **LCP 9.0/25**. The whole
-remaining gap is LCP, and Lighthouse splits its 4.6 s into **316 ms time-to-first-byte plus
-2,899 ms of element render delay, with no resource-load phase at all.** The LCP element is
-therefore neither an image nor download-bound: it is render delay. Halving the JS and CSS bytes
-could not move it because bytes were never the binding constraint.
+The Performance score is a different story, and it is worth recording precisely because the *premise* was wrong. **Lighthouse defaults to `throttlingMethod: "simulate"`** — it loads the page on the real connection and then mathematically models slow-4G with 4× CPU (Lantern). The "79", the "LCP 4.7 s" and the "2,899 ms element render delay" that motivated this work were all **model outputs, not measurements**. Two simulate runs on identical builds scored 79 and 84, so they are also too noisy to compare.
 
-This release is still worth having on its own terms — 41.6 KB less to download on a phone at the
-side of a court is a real improvement, whatever Lighthouse's composite says. But the ≥90 target
-remains unmet, and closing it needs a different kind of fix. Phase 6 of
-`docs/todo/seo-discoverability-plan.md` now carries the diagnosis and the next step: identify the
-LCP element first. Notably, inlining critical CSS — the option that looked next-best — targets the
-render-blocking figure, which is already down to 570 ms and is not what LCP is waiting on.
+Measured with real throttling (`--throttling-method=devtools`), twice:
+
+| | simulate (default) | devtools (measured) |
+|---|---|---|
+| Performance | 79 / 84 | **92, 92** |
+| LCP | 4.3–4.6 s | **1.65 s / 1.62 s** |
+| TBT | 20–50 ms | 21 / 20 ms |
+| CLS | 0.002 | **0.160** |
+
+**The ≥90 target was already being met.** LCP is not and never was the bottleneck: the LCP element is `h1.home-h1`, the static hero heading, confirmed from Lighthouse's own trace as a single `largestContentfulPaint::Candidate` of `type=text` at 38,720 px² — and it paints *at first paint*, so LCP equals FCP. The network is idle by 1.66 s and TBT is ~20 ms. There was no download or main-thread bottleneck to fix, which is exactly why halving the bytes moved nothing.
+
+**What the measured run did surface is a real defect the default mode hides completely: CLS 0.160**, against a 0.1 threshold, where simulate reports 0.002. It is almost entirely one element — `section#homeFeatures` at 0.1587 of the 0.1596 total. The cause is `<div id="homeDemoRoot"></div>`, which is empty in the markup with no reserved height, so `homeDemo.init()` building the ~351 px-tall hero widget pushes every section below it down. That is the same bug class this project already documents for `icons/result-screen.webp`, whose `width`/`height` attributes exist for precisely this reason. Tracked as the live item in Phase 6 of `docs/todo/seo-discoverability-plan.md`, together with the measured widget dimensions and why `aspect-ratio` is the wrong tool for it.
+
+**Standing lesson: verify Core Web Vitals with `--throttling-method=devtools`.** The default mode's LCP is modelled and its CLS is near-blind.
 
 ### Verification
 - The full app was exercised against minified assets before shipping: homepage renders with the hero, prose and self-playing demo intact; the hero CTA routes to setup; a match starts; the result screen renders with all five story cards, three set charts, wrapped long team names, aligned numeric columns and no truncation. Exactly one screen visible, one `<h1>`, `data-js` armed, all ten scroll-reveals correct, and **zero console errors**.
