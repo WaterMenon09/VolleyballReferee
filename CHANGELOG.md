@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.29 — 2026-09-02
+
+Release B of the discoverability plan, and the first content this project has ever had. v4.28 shipped the plumbing — a sitemap, a robots.txt, a verified Search Console property — but the plan's own diagnosis opens by saying the real problem is that **there is nothing to rank**: `index.html` carried ~282 words of visible text, all of it UI chrome like "Team 1" and "Start Match". v4.25's homepage fixed that for one URL. This adds six.
+
+### Added
+- **Five rules guides and a hub, under `guides/`.** Hand-written static HTML, no build step:
+  - `volleyball-rotation-explained.html` — positions 1–6, why the numbers advance clockwise while the players appear to walk the other way, and the rule everyone gets wrong: **you rotate on a side-out, not on a point**. Carries an inline SVG court diagram.
+  - `how-to-keep-score-in-volleyball.html` — rally scoring, the two-point margin, best-of-five, the 15-point decider.
+  - `volleyball-substitution-rules.html` — the six-entry cap, that it counts **entries onto court rather than pairs**, and the starter/substitute pair lock.
+  - `libero-rules-explained.html` — why a libero replacement is not a substitution.
+  - `timeouts-and-technical-timeouts.html` — requested timeouts versus the automatic ones at 8 and 16.
+  - `index.html` — the hub.
+
+  Each carries its own title, description, canonical and OG tags, plus `Article` + `BreadcrumbList` JSON-LD and, where there is a real on-page FAQ, `FAQPage`. The answers are byte-identical to the on-page copy, because Google drops FAQ rich results whose answers do not appear on the page — the same invariant `index.html` already documents for the homepage.
+
+  Content for the substitution, libero and timeout pages came straight out of this repo's own `CLAUDE.md`, which had already written up the FIVB details the app enforces. The rotation page has the best hook of the five: the app *is* an interactive rotation tracker, so the guide can hand the reader the thing it just explained.
+
+- **A "Learn the rules" band on the homepage**, linking all five guides plus the hub.
+
+  It sits **after** `#homeInstall` and **before** the final CTA, and the position is deliberate. Crawlers do not scroll, so link position is SEO-neutral; putting it above the install banner would push that banner's one-shot `IntersectionObserver` further down an already four-viewport page, which is exactly what v4.26 was built to avoid. It is also **not** in `.credits` — that element is `position: fixed` on every screen except home, so guide links there would float over a live scoreboard.
+
+### Internal — three constraints settled by construction rather than by argument
+- **The guides add no new `.js` or `.css` file, and reuse `styles.css`.** This is the load-bearing decision. The deploy's minify step is a **hardcoded two-filename list**, and this repo's notes contradicted themselves on whether a new asset belongs in `APP_SHELL`. A guide-specific stylesheet would have needed resolving both; reusing the app's stylesheet needs neither. The pages inherit the Stadium Night ground, the token scale and the self-hosted fonts for free, and the new `.guide-*` block composes entirely off existing tokens. Cost: a text page pulls the full 70 KB app stylesheet, which is the cheaper side of that trade.
+- **The guides are deliberately absent from `APP_SHELL`.** They are online-only surface, not app shell. Worth stating the offline outcome precisely rather than optimistically: a failed navigation to a never-visited guide falls back to the cached `./index.html`, whose `styles.css` and `app.js` references are **document-relative**, so at a `/guides/` URL they resolve to `/guides/styles.css` and `/guides/app.js` and 404. The offline fallback is therefore unstyled, script-less prose — not a working homepage. That is an accepted consequence of keeping these out of the app shell, not a defect. A guide the visitor *has* opened online is a different story: HTML navigations are network-first and cache on success, so a previously-read guide does work offline.
+- **They do not load `app.js`,** so their gtag snippet keeps its **automatic** pageview. `index.html` sets `send_page_view: false` only because `app.js` sends virtual pageviews for the SPA's five screens; copying that flag here would have recorded zero pageviews for every guide, permanently and silently. Each page carries a comment saying so.
+- New CSS sits before the `prefers-reduced-motion` block, which remains the last rule in `styles.css`. Minified `styles.css` measures **75,438 B** against the deploy gate's 95,000 B ceiling (`app.js` 94,541 B against 130,000) — the guide block cost about 4.9 KB minified, leaving room for more pages without touching the ceiling.
+- `sw.js` `VERSION` → `v4.2.9`; `sitemap.xml` extended from 1 URL to 7.
+
+### Note on scope
+These pages describe the FIVB indoor rules as commonly applied, and say so in a footer on every page — competitions vary, and the guides point the reader at their own federation for anything sanctioned. No FIVB rule numbers were invented: where the exact clause was not certain, the rule is described rather than cited.
+
 ## v4.28 — 2026-09-02
 
 The first repo-side release of the search-and-AI discoverability work, plus the layout-shift bug that work uncovered. Auditing what the plan still needed turned up that most of its on-page phase had already shipped in v4.25 — title, meta description, canonical, JSON-LD and the social card were all live, and the UTM attribution fix landed with them. What was actually missing was the crawler plumbing, and one genuine bug nobody had scheduled.

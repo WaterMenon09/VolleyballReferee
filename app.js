@@ -117,7 +117,7 @@ const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.28';
+const APP_VERSION = 'v4.29';
 
 // ── Changelog (homepage "What's New" modal) ────────────────────────────────
 // User-facing rewrite of CHANGELOG.md, not a copy of it — the file is developer-toned (internal
@@ -125,6 +125,13 @@ const APP_VERSION = 'v4.28';
 // fetch('./CHANGELOG.md'): fetching would need the raw file added to sw.js's APP_SHELL to work
 // offline, for text nobody but a developer would want to read anyway.
 const CHANGELOG_ENTRIES = [
+    {
+        version: 'v4.29',
+        date: 'Sep 2, 2026',
+        changes: [
+            'New rules guides: rotation, keeping score, substitutions, the libero, and timeouts. Plain explanations of the things that actually come up mid-match — linked from the welcome page under "Learn the rules".'
+        ]
+    },
     {
         version: 'v4.28',
         date: 'Sep 2, 2026',

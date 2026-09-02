@@ -1,4 +1,4 @@
-const VERSION = 'v4.2.8';
+const VERSION = 'v4.2.9';
 const CACHE = `vbref-${VERSION}`;
 // Add every new app-shell asset here or it will not be available offline.
 const APP_SHELL = [

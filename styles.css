@@ -4195,6 +4195,243 @@ body[data-screen="home"] .credits {
     flex: 0 0 auto;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   GUIDE PAGES (.guide-* / .guides-*)  —  guides/*.html
+   ══════════════════════════════════════════════════════════════════════════════
+   These serve the standalone rules-explainer pages under guides/. They live in THIS
+   stylesheet on purpose: a separate guides.css would need adding to BOTH the deploy's
+   hardcoded minify filename list AND the APP_SHELL/not-APP_SHELL argument in sw.js.
+   Reusing this file sidesteps both, and the pages inherit body's Stadium Night ground,
+   the token scale and the self-hosted fonts for free.
+
+   Guide pages reuse .app-bar, .eyebrow, .btn, .home-wrap and .home-card unchanged.
+   Everything below is additive; nothing here is referenced from index.html except
+   .home-guides*, the homepage band that links out to them.
+
+   They deliberately do NOT use .credits — it is position: fixed, which is right for a
+   scoreboard and wrong for a document you scroll. Guides use .guide-foot instead.
+   ────────────────────────────────────────────────────────────────────────────── */
+
+/* On guides the brand is a LINK back to the app, not the app's non-interactive
+   role="img" wordmark. It keeps aria-label on the anchor, because .app-brand's span is
+   display: none at <=360px and the mark is aria-hidden, so without it the link would
+   have no accessible name on a small phone. */
+a.app-brand {
+    text-decoration: none;
+    /* 44px touch target. index.html's brand is a non-interactive div role="img", so this is
+       new tappable surface and the repo's viewport checklist applies to it. The bar is 52px
+       tall, so 44 fits without changing .app-bar's height. min-width matters too: at <=360px
+       .app-brand's wordmark span is display: none, leaving only the 24px mark, so without it
+       the target is 24 wide. This selector matches ONLY guide pages -- index.html's brand is a
+       div, not an anchor. */
+    min-height: 44px;
+    min-width: 44px;
+}
+a.app-brand:hover { color: var(--gold); }
+a.app-brand:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: var(--r-sm); }
+
+.guide-page {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    /* Clears the fixed .app-bar exactly as .container does. */
+    padding: calc(52px + env(safe-area-inset-top, 0px) + var(--sp-5)) var(--sp-4) var(--sp-8);
+}
+
+.guide-crumb {
+    font: 400 0.85rem/1.4 var(--font-body);
+    color: var(--ink-45);
+    margin-bottom: var(--sp-4);
+}
+.guide-crumb a { color: var(--ink-65); text-decoration: none; border-bottom: 1px solid var(--stroke-2); }
+.guide-crumb a:hover { color: var(--gold); border-bottom-color: var(--gold); }
+.guide-crumb span { padding: 0 var(--sp-2); color: var(--ink-25); }
+
+.guide-h1 {
+    font: 800 clamp(1.9rem, 6.4vw, 2.9rem)/1.05 var(--font-display);
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: var(--sp-2) 0 var(--sp-4);
+    /* Rule titles contain long unbroken terms; wrap rather than spill the column. */
+    overflow-wrap: anywhere;
+}
+
+.guide-lead {
+    font: 400 clamp(1.02rem, 2.4vw, 1.15rem)/1.6 var(--font-body);
+    color: var(--ink-85);
+    margin-bottom: var(--sp-6);
+}
+
+/* ── prose ── */
+.guide-prose { font: 400 1rem/1.7 var(--font-body); color: var(--ink-65); }
+.guide-prose > * + * { margin-top: var(--sp-4); }
+.guide-prose h2 {
+    font: 800 clamp(1.35rem, 3.6vw, 1.75rem)/1.15 var(--font-display);
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    margin-top: var(--sp-7);
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--stroke-1);
+    overflow-wrap: anywhere;
+}
+.guide-prose h3 {
+    font: 700 1.08rem/1.3 var(--font-display);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-top: var(--sp-5);
+}
+.guide-prose strong { color: var(--ink-85); font-weight: 600; }
+.guide-prose a { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
+.guide-prose ul, .guide-prose ol { padding-left: var(--sp-5); }
+.guide-prose li + li { margin-top: var(--sp-2); }
+.guide-prose li::marker { color: var(--gold-deep); }
+.guide-prose code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.92em;
+    background: var(--surface-2);
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--r-sm);
+    padding: 1px 5px;
+}
+
+/* Tables scroll inside their own box; the page body must never scroll sideways. */
+.guide-tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.guide-prose table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 22rem;
+    font-size: 0.95rem;
+}
+.guide-prose th, .guide-prose td {
+    text-align: left;
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--stroke-1);
+    vertical-align: top;
+}
+.guide-prose th {
+    font: 600 0.74rem/1.2 var(--font-body);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-45);
+    white-space: nowrap;
+}
+
+/* ── callout: the rule that actually bites ── */
+.guide-note {
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-1);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 var(--r-md) var(--r-md) 0;
+    box-shadow: var(--glass-edge);
+    padding: var(--sp-4) var(--sp-5);
+}
+.guide-note-label {
+    display: block;
+    font: 600 0.7rem/1 var(--font-body);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: var(--sp-2);
+}
+.guide-note p { color: var(--ink-85); }
+.guide-note > * + * { margin-top: var(--sp-3); }
+
+/* ── court diagram (inline SVG, no dependency) ── */
+.guide-figure { margin-top: var(--sp-5); }
+.guide-figure svg { display: block; width: 100%; height: auto; }
+.guide-figcap {
+    font: 400 0.86rem/1.5 var(--font-body);
+    color: var(--ink-45);
+    margin-top: var(--sp-3);
+    text-align: center;
+}
+
+/* ── CTA back into the app ── */
+.guide-cta {
+    margin-top: var(--sp-8);
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-2);
+    border-radius: var(--r-md);
+    box-shadow: var(--glass-edge);
+    padding: var(--sp-5);
+    text-align: center;
+}
+.guide-cta-h {
+    font: 800 clamp(1.2rem, 3vw, 1.5rem)/1.15 var(--font-display);
+    color: var(--ink);
+    margin-bottom: var(--sp-2);
+}
+.guide-cta p { font: 400 0.95rem/1.6 var(--font-body); color: var(--ink-65); max-width: 46ch; margin: 0 auto var(--sp-4); }
+
+/* ── footer + cross-links ── */
+.guide-foot {
+    margin-top: var(--sp-8);
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--stroke-1);
+    font: 400 0.88rem/1.6 var(--font-body);
+    color: var(--ink-45);
+}
+.guide-foot a { color: var(--ink-65); text-decoration: none; border-bottom: 1px solid var(--stroke-2); }
+.guide-foot a:hover { color: var(--gold); border-bottom-color: var(--gold); }
+.guide-morelinks { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-bottom: var(--sp-5); }
+/* 44px targets, matching .home-foot-links a and a.app-brand rather than leaving standalone
+   footer links to a looser standard than the rest of this release. Text-decoration rather
+   than border-bottom for the underline, because growing the box to 44px would drag a
+   border away from the text (the .home-ghost-link lesson in CLAUDE.md). */
+.guide-morelinks a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    border-bottom: none;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* ── hub grid (guides/index.html) and the homepage band that mirrors it ── */
+.guides-grid, .home-guides-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: var(--sp-4);
+    margin-top: var(--sp-5);
+    list-style: none;
+    padding: 0;
+}
+.guide-tile {
+    display: block;
+    height: 100%;
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--r-md);
+    box-shadow: var(--glass-edge);
+    padding: var(--sp-4);
+    text-decoration: none;
+    transition: background var(--dur-med) var(--ease-out), border-color var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out);
+}
+.guide-tile:hover { background: var(--surface-2); border-color: var(--stroke-2); transform: translateY(-2px); }
+.guide-tile:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.guide-tile-h {
+    /* REQUIRED. These two classes sit on <h2>/<p> on the hub (block by default) but on
+       <span> in index.html's "Learn the rules" band, where inline would run the heading
+       straight into the description on one line and silently void margin-bottom. Same
+       span-as-heading pattern as .guide-note-label, which sets display: block for the
+       same reason. Inert on the hub. */
+    display: block;
+    font: 700 1.05rem/1.25 var(--font-display);
+    letter-spacing: 0.01em;
+    color: var(--ink);
+    margin-bottom: var(--sp-2);
+    overflow-wrap: anywhere;
+}
+.guide-tile-d { display: block; font: 400 0.9rem/1.5 var(--font-body); color: var(--ink-45); }
+
+/* The homepage band. Sits inside #home as its LAST section, after #homeInstall —
+   crawlers do not scroll, so link position is SEO-neutral, and inserting above the
+   install banner would push its one-shot IntersectionObserver deeper down an already
+   four-viewport page. See the install-banner notes in CLAUDE.md. */
+.home-guides-grid { margin-top: var(--sp-5); }
+
 /* ── Reduced motion — MUST be last rule block (cascade wins over everything) ── */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {

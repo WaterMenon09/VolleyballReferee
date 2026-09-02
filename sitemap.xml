@@ -1,11 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Absolute URLs, and they keep /VolleyballReferee/ on purpose: the app was renamed to
      SpikeSheet in v4.23 but the repo and Pages URL deliberately did not move.
+
      lastmod is maintained by hand — update it in the same release that changes the page,
-     or drop it. A lastmod that lies is worse than no lastmod. -->
+     or drop it. A lastmod that lies is worse than no lastmod.
+
+     Add a <url> here for every new guide page. This file is what actually registers the
+     pages with Google and Bing; the `Sitemap:` line in robots.txt cannot, because that
+     file sits at a subpath and is never read (see robots.txt for the full explanation).
+     Submit it in the Search Console UI. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://watermenon09.github.io/VolleyballReferee/</loc>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+  <url>
+    <loc>https://watermenon09.github.io/VolleyballReferee/guides/</loc>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+  <url>
+    <loc>https://watermenon09.github.io/VolleyballReferee/guides/volleyball-rotation-explained.html</loc>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+  <url>
+    <loc>https://watermenon09.github.io/VolleyballReferee/guides/how-to-keep-score-in-volleyball.html</loc>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+  <url>
+    <loc>https://watermenon09.github.io/VolleyballReferee/guides/volleyball-substitution-rules.html</loc>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+  <url>
+    <loc>https://watermenon09.github.io/VolleyballReferee/guides/libero-rules-explained.html</loc>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+  <url>
+    <loc>https://watermenon09.github.io/VolleyballReferee/guides/timeouts-and-technical-timeouts.html</loc>
     <lastmod>2026-09-02</lastmod>
   </url>
 </urlset>

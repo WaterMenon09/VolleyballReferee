@@ -363,6 +363,46 @@
         </div>
       </section>
 
+      <!-- ── Learn the rules ──
+           Placed AFTER #homeInstall and BEFORE the outro on purpose. Crawlers do not scroll,
+           so link position is SEO-neutral, and putting this above the install banner would
+           push that banner's one-shot IntersectionObserver deeper down an already
+           four-viewport page (see the install-banner notes in CLAUDE.md). The final CTA stays
+           last. No .reveal on the tiles: its transform fights .guide-tile:hover's, and these
+           are far enough down that an entrance animation buys nothing.
+           The guide pages are separate HTML files that do NOT load app.js, so nothing here
+           touches the five-screen showScreen() invariant. -->
+      <section class="home-section home-section-quiet" aria-labelledby="homeGuidesTitle">
+        <div class="home-wrap">
+          <span class="eyebrow">Learn the rules</span>
+          <h2 id="homeGuidesTitle" class="home-h2">Not sure how something works?</h2>
+          <p class="home-sub">Short, plain explanations of the rules that actually come up mid-match.</p>
+          <ul class="home-guides-grid">
+            <li><a class="guide-tile" href="guides/volleyball-rotation-explained.html">
+              <span class="guide-tile-h">Rotation explained</span>
+              <span class="guide-tile-d">Positions 1&ndash;6, why it is clockwise, and when a rotation actually happens.</span>
+            </a></li>
+            <li><a class="guide-tile" href="guides/how-to-keep-score-in-volleyball.html">
+              <span class="guide-tile-h">How to keep score</span>
+              <span class="guide-tile-d">Rally scoring, sets, deuce and the 15-point deciding set.</span>
+            </a></li>
+            <li><a class="guide-tile" href="guides/volleyball-substitution-rules.html">
+              <span class="guide-tile-h">Substitution rules</span>
+              <span class="guide-tile-d">The six-entry cap, and why a starter and their sub are locked together.</span>
+            </a></li>
+            <li><a class="guide-tile" href="guides/libero-rules-explained.html">
+              <span class="guide-tile-h">Libero rules</span>
+              <span class="guide-tile-d">Why a libero replacement is not a substitution, and what the libero may not do.</span>
+            </a></li>
+            <li><a class="guide-tile" href="guides/timeouts-and-technical-timeouts.html">
+              <span class="guide-tile-h">Timeouts</span>
+              <span class="guide-tile-d">Regular timeouts, the automatic technical timeouts at 8 and 16, and set breaks.</span>
+            </a></li>
+          </ul>
+          <p class="home-foot-links"><a href="guides/">All guides</a></p>
+        </div>
+      </section>
+
       <!-- ── Final CTA ── -->
       <section class="home-outro">
         <div class="home-wrap home-wrap-narrow">
@@ -806,7 +846,7 @@
       </div>
     </div>
 
-    <footer class="credits">v4.28 | Created by Menon Pranto</footer>
+    <footer class="credits">v4.29 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
     <script>
