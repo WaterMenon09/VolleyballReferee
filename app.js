@@ -117,7 +117,7 @@ const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.25';
+const APP_VERSION = 'v4.26';
 
 // ── Changelog (homepage "What's New" modal) ────────────────────────────────
 // User-facing rewrite of CHANGELOG.md, not a copy of it — the file is developer-toned (internal
@@ -125,6 +125,14 @@ const APP_VERSION = 'v4.25';
 // fetch('./CHANGELOG.md'): fetching would need the raw file added to sw.js's APP_SHELL to work
 // offline, for text nobody but a developer would want to read anyway.
 const CHANGELOG_ENTRIES = [
+    {
+        version: 'v4.26',
+        date: 'Sep 2, 2026',
+        changes: [
+            'Long team names are no longer cut off. The full-time score, the set-by-set table and your match history now wrap the whole name instead of trimming it to "MSBY Black…".',
+            'On iPhone and iPad, the "Add to Home Screen" tip now appears once instead of on every visit — including after you have already added it.'
+        ]
+    },
     {
         version: 'v4.25',
         date: 'Sep 2, 2026',
@@ -366,6 +374,13 @@ function showScreen(name) {
                 window.homeDemo.pause();
             }
         } catch (_) { /* a broken hero animation must never cost you the app */ }
+    }
+    // v4.26: the iOS install banner reveals HERE rather than in initHome(), because it writes a
+    // permanent one-time flag and initHome() runs before this router knows where the load lands
+    // — see initInstallBanner(). Same try/catch reasoning as the demo above: a banner must never
+    // cost the user the router.
+    if (name === 'home' && _revealIosInstallBanner) {
+        try { _revealIosInstallBanner(); } catch (_) { /* an install nudge is never load-bearing */ }
     }
     trackScreen(name);
 }
@@ -1310,6 +1325,9 @@ function initHome() {
 // the `vb-` prefix like every other key in this app; never rename an existing one.
 const INSTALL_DISMISSED_KEY = 'vb-install-dismissed';
 let _deferredInstallPrompt = null;
+// v4.26: armed by initInstallBanner()'s iOS branch, fired by showScreen() the first time #home
+// is actually displayed. See both call sites for why it cannot fire at init() time.
+let _revealIosInstallBanner = null;
 
 function isIosSafari() {
     // iPadOS 13+ reports as a Mac, so the touch-point check is not optional.
@@ -1348,8 +1366,50 @@ function initInstallBanner() {
         document.getElementById('homeInstallCopy').textContent =
             'Tap the Share button, then “Add to Home Screen”. It then opens like any other app '
             + 'and scores a full match with no signal.';
-        reveal();
-        track('install_banner_shown', { kind: 'ios' });
+        // v4.26: ARM the reveal; do not fire it here. init() runs initHome() BEFORE
+        // routeInitialScreen(), so at this point we do not yet know whether this load lands on
+        // the homepage or restores straight into a match — and `matchOver` counts as
+        // restorable, so a referee who finished a match reloads onto #matchResult indefinitely.
+        // Revealing into a hidden #home would be harmless by itself, but the dismissed-key
+        // write is PERMANENT and nothing ever clears it: firing here would burn the one-time
+        // instruction for a user who never saw it. showScreen() fires this on the home branch.
+        _revealIosInstallBanner = () => {
+            _revealIosInstallBanner = null;             // one-shot
+            reveal();
+            // "Shown" has to mean SEEN, not "the homepage was routed". #homeInstall is the last
+            // band in #home — below the hero, the showcase, What's-new and the FAQ, roughly four
+            // viewport heights down on a phone. A first-time visitor who taps "Start scoring" in
+            // the hero never scrolls to it, so writing the key on reveal would burn their
+            // one-time instruction exactly as firing at init() time did, just one step later.
+            // Gate the write on the banner actually intersecting the viewport.
+            //
+            // The reveal above must happen FIRST: while the banner carries `hidden` it is
+            // `display: none !important`, so it has no layout box and IntersectionObserver
+            // would never fire on it. An observer also fires for an already-intersecting
+            // target, so a short page or a tall viewport is handled with no special case.
+            //
+            // Deliberately NOT gated on prefers-reduced-motion, unlike initHomeReveals() — this
+            // observer records an impression, it does not animate anything.
+            const markSeen = () => {
+                // An already-installed iOS user browsing in a Safari tab reports display-mode
+                // `browser` — `navigator.standalone` is true only inside the installed shell,
+                // and no API exposes "is installed" — so the standalone guard at the top of
+                // this function cannot catch them. Without this they are re-offered, on every
+                // single visit, the share-sheet instruction they already followed. One-time
+                // instruction, not a permanent nag (§11). Chromium's branch below is untouched:
+                // there the deferred prompt is a real, repeatable offer, so it stays until the
+                // user dismisses it.
+                try { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); } catch (_) {}
+                track('install_banner_shown', { kind: 'ios' });
+            };
+            if (!('IntersectionObserver' in window)) { markSeen(); return; }
+            const io = new IntersectionObserver((entries, obs) => {
+                if (!entries.some(e => e.isIntersecting)) return;
+                obs.disconnect();                       // one-shot
+                markSeen();
+            }, { threshold: 0.2 });
+            io.observe(banner);
+        };
         return;
     }
 

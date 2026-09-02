@@ -322,6 +322,33 @@ match always wins and routes to its own screen exactly as before.
   overflowed by ~4px at 320px. The chevron is positioned out of flow.
 - **`.home-ghost-link` underlines with `text-decoration`, not `border-bottom`.** A border sits on
   the box, so growing the box to a 44px touch target drags the underline away from the text.
+- **The iOS install banner writes `vb-install-dismissed` the moment it is SHOWN, not only when
+  dismissed (v4.26). That is deliberate — do not "fix" it.** **And "shown" means
+  `showScreen('home')` actually ran — NOT `initInstallBanner()`.** `init()` calls `initHome()`
+  *before* `routeInitialScreen()`, so when `initInstallBanner()` runs, nothing yet knows whether
+  this load lands on the homepage or restores straight into a match. The iOS branch therefore only
+  *arms* a one-shot (`_revealIosInstallBanner`) which `showScreen()` fires on its `home` branch,
+  beside the `homeDemo` lifecycle. **Do not collapse that back into `initInstallBanner()`.** The
+  write is permanent and nothing ever clears it, and `matchOver` counts as restorable — so an iOS
+  referee who finished a match reloads onto `#matchResult` indefinitely, and firing at init time
+  would burn their one-time instruction without ever showing it to them.
+- **That one-shot is itself two stages, and both are needed.** It reveals the banner, then writes
+  the key only when an `IntersectionObserver` says the banner actually entered the viewport.
+  `#homeInstall` is the LAST band in `#home` — below the hero, the showcase, What's-new and the
+  FAQ, roughly four viewport heights down on a phone — so a first-time visitor who taps
+  "Start scoring" in the hero never reaches it. Writing on reveal would burn their one-time
+  instruction just one step later than firing at init() did. **The reveal must come first**: while
+  the banner carries `hidden` it is `display: none !important`, has no layout box, and the
+  observer would never fire. Unlike `initHomeReveals()`, this observer is deliberately **not**
+  gated on `prefers-reduced-motion` — it records an impression, it does not animate anything. An already-installed iOS user browsing
+  in a Safari tab reports display-mode `browser`: `navigator.standalone` is true only inside the
+  installed shell, and no web API exposes "is installed", so `initInstallBanner()`'s standalone
+  guard cannot see them. Without the write they are re-offered, forever, the share-sheet
+  instruction they already followed. It is a one-time instruction, not an offer. **Chromium's
+  branch deliberately does NOT do this** — there `beforeinstallprompt` only fires when the app
+  genuinely qualifies, so the offer is real and repeatable and stays until the user dismisses it.
+  `getInstalledRelatedApps()` is not an option: it needs a `related_applications` manifest entry
+  pointing at a native app, which does not exist here.
 
 ### The hero demo widget (`homeDemo`)
 
@@ -394,6 +421,50 @@ The result screen is no longer a static readout — it renders a **computed stat
 - `buildMatchStoryCards()` caps the strip at 5. Selection priority is **not** display order: the two never-hide cards (Total Rallies, Points) take guaranteed slots, remaining slots go story-first. Display order stays left-to-right as pushed.
 - **Colour rule:** use `sideColors()`, which resolves the identity-mapped `--team1-color`/`--team2-color` (keyed to `originalId`) into the current side order. Never use those custom properties directly for anything ordered by side — that mismatch was a real bug in the pre-v4.20 set pills.
 - **Restore path is the regression trap.** `endMatch({fromRestore:true})` runs the same render on reload, so every element must derive from persisted state only — no transient variables, no `Date.now()` in the render path. After changing anything here, verify a reload on the result screen re-renders identically and the count-up does not replay.
+
+### Team names wrap, they do not truncate (v4.26)
+
+Three surfaces display a team name in a box that does **not** grow with viewport width, and all
+three used to clip it with `white-space: nowrap` + `text-overflow: ellipsis`. They now wrap:
+`.ft-name` (the full-time scoreline), `.box-score td.box-score-name`, and `.history-team-name`.
+This matches `.story-card-detail`, which has wrapped rather than truncated team names since v4.20
+for the same reason — an ellipsis silently drops information the referee typed in.
+
+The bug was not cosmetic at the edges: the scoreline's `1fr` track is capped at roughly
+`(container − digits − gaps) / 2` and **does not widen with the viewport** — 99px at 400px, 82px at
+375px, 54px at 320px — so it clipped anything past ~12 characters at *every* screen size. The
+history modal was worse, at 81px per name on a 320px phone.
+
+**Maintenance traps:**
+
+- **`min-width: calc(9ch + 26px)` on `.box-score td.box-score-name` (in the `≤480px` block) is
+  load-bearing. It is NOT a redundant twin of the `max-width` beside it.** Wrapping reduces a
+  cell's min-content contribution, and min-content is what reserves a column in auto table layout,
+  so without the pin the name column *collapses*: 105px → 63px at 375px in the five-set case, with
+  rows 89px tall. `overflow-wrap: break-word` does not avoid this either — it leaves min-content at
+  the longest word, still only 76px. **The pin is required whichever wrap mode is used.** Pinned,
+  rows grow only 44px → 52px and the panel's horizontal scroll is unchanged from before the fix.
+- **`overflow-wrap: anywhere`, not `break-word` — the reason is intrinsic sizing, not line
+  breaking.** Both values break an otherwise-unbreakable word; per CSS Text 3 the *only*
+  difference is that `break-word` does **not** fold those break opportunities into min-content.
+  All three surfaces are flex items or table cells whose automatic minimum size is min-content, so
+  under `break-word` each is unable to shrink below its longest word — the two flex items then
+  spill their track outright, while the table cell instead surrenders the column (the 76px figure
+  in the box-score bullet above). Same mechanism, seen from two sides. Verified against a
+  60-character single word: it wraps and no element overflows its box. **Note `html` and `body`
+  both set `overflow-x: hidden` (styles.css:77, :123), so a page-level horizontal-scroll assertion
+  cannot fail — always verify these surfaces with per-element `scrollWidth > clientWidth`.**
+- **Do not add `text-align` to `.ft-name`** — it already computes `center` by inheritance.
+- **Do not add `title=` tooltips as a "better" fix.** They were considered and rejected: `title` is
+  inert on touch, which is exactly where the truncation was worst.
+- **Do not add `maxlength` to the name inputs.** The layout survives pathological input — a
+  60-character unbroken word wraps with the digits still centred and **no element reporting
+  `scrollWidth > clientWidth`** (stated per-element on purpose: see the overflow-x warning above) —
+  so a `maxlength` would be cosmetic only, while silently truncating what the user typed and doing
+  nothing for names already in `vb-match-history`.
+- A wrapped name **cannot** ragged the box score's numeric columns — a table row's cells share a
+  height by definition. This was the stated reason for keeping the ellipsis; measurement disproved
+  it (`columnsAligned` holds at every viewport).
 
 ## Code Review Checklist
 

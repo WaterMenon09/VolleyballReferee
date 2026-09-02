@@ -277,9 +277,14 @@
           <figure class="home-shot reveal">
             <!-- width/height are mandatory, not decorative: without them this image lands with no
                  reserved box and shifts everything below it, which is the CLS budget in §7.
-                 Generated from the real result screen; regenerate if that screen changes. -->
-            <img src="icons/result-screen.webp" alt="SpikeSheet's full-time screen: MSBY beat Schweiden 2-1, shown with a set-by-set box score, per-set durations, and match statistics including longest run, lead changes and biggest comeback."
-                 width="400" height="860" loading="lazy" decoding="async">
+                 Generated from the real result screen; regenerate if that screen changes, and
+                 update BOTH attributes in the same edit — they must match the file exactly.
+                 v4.26 recaptured this at 400×890 (was 400×860) with the full club names: the
+                 old capture used short ones only because long names truncated, which is the bug
+                 v4.26 fixed. It is a viewport crop, not a full-page shot; the frame is chosen so
+                 the box score is complete and the fixed footer lands in the gap beneath it. -->
+            <img src="icons/result-screen.webp" alt="SpikeSheet's full-time screen: MSBY Black Jackals beat Schweiden Adlers 2-1, shown with a set-by-set box score, per-set durations, and match statistics including longest run, lead changes and biggest comeback."
+                 width="400" height="890" loading="lazy" decoding="async">
           </figure>
         </div>
       </section>
@@ -801,7 +806,7 @@
       </div>
     </div>
 
-    <footer class="credits">v4.25 | Created by Menon Pranto</footer>
+    <footer class="credits">v4.26 | Created by Menon Pranto</footer>
 
     <script src="app.js"></script>
     <script>

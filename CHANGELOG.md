@@ -6,6 +6,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.26 — 2026-09-02
+
+A bug fix release that clears the way for the SEO work. v4.25 shipped a homepage whose full-time
+showcase screenshot deliberately used short jersey names ("MSBY", "SCHWEIDEN") — because long ones
+truncate. Shipping more marketing on top of a product bug the marketing is already dodging is the
+wrong order, so this lands first.
+
+### Fixed
+- **Long team names no longer truncate on the three surfaces that display them.** The result
+  screen's full-time scoreline, its set-by-set box score, and the match-history modal rows all
+  clipped to an ellipsis. The cause was the same in each: `white-space: nowrap` plus
+  `text-overflow: ellipsis` on a container that does not grow with viewport width. The hero
+  scoreline's name track is capped at roughly `(container − digits − gaps) / 2` — measured at 99px
+  at 400px wide, 82px at 375px, **54px at 320px** — so it clipped anything past ~12 characters at
+  every screen size. The history modal was worse still: 81px per name at 320px. All three now wrap.
+- **The iOS install banner no longer reappears after the app has been installed.** An
+  already-installed iOS user browsing the site in a Safari tab reports display-mode `browser` —
+  `navigator.standalone` is true only inside the installed shell, and no web API exposes "is
+  installed" — so the existing standalone guard could not see them, and they were re-offered the
+  share-sheet instruction they had already followed on every visit. The iOS branch now marks the
+  banner dismissed the first time it is actually seen — the banner is the last band on the
+  homepage, so the write is gated on it scrolling into view rather than on the homepage merely
+  being routed, and a visitor who taps straight into a match is not charged for an impression they
+  never had. Chromium's branch is untouched: there the deferred prompt is a real, repeatable
+  offer, so it stays until the user dismisses it.
+
+### Changed
+- **`icons/result-screen.webp` regenerated with the full club names**, since the workaround that
+  forced short ones no longer applies. The `width`/`height` attributes on the homepage `<img>` were
+  updated in the same edit to match the new capture — they are load-bearing for the CLS budget, not
+  decorative.
+
+### Internal
+- The box-score name cell gains `min-width: calc(9ch + 26px)` beside its existing `max-width`.
+  This is **not** a redundant duplicate. Wrapping reduces a cell's min-content contribution, and
+  min-content is what reserves a column in auto table layout, so without the pin the name column
+  collapses in the five-set case (105px → 63px at 375px, with rows 89px tall). `overflow-wrap:
+  break-word` does not avoid this either — it leaves min-content at the longest word, still only
+  76px — so the pin is required whichever wrap mode is used. Pinned, rows grow only 44px → 52px and
+  the panel's horizontal scroll is unchanged from before the fix.
+- `overflow-wrap: anywhere` rather than `break-word` on all three surfaces, for intrinsic sizing
+  rather than line breaking: both values break an otherwise-unbreakable word, and per CSS Text 3
+  the only difference is that `break-word` does not fold those break opportunities into
+  min-content. All three surfaces are flex items or table cells whose automatic minimum size is
+  min-content, so `break-word` would leave each unable to shrink below its longest word.
+- This brings the three surfaces into line with `.story-card-detail`, which has wrapped rather than
+  truncated team names since v4.20 for exactly this reason.
+
+### Verification
+- Measured at 320 / 375 / 390 / 400 / 768 / 844 / 1024 / 1280 px, with the history modal both open
+  and closed: zero elements where `scrollWidth` exceeds `clientWidth` on any of the three surfaces,
+  box-score numeric columns stay aligned, and the full-time digits stay centred. Default
+  `Team A` / `Team B` renders exactly as before — 44px rows, single-line names. That per-element
+  measurement is the load-bearing one: `html` and `body` both set `overflow-x: hidden`, so a
+  page-level horizontal-scroll assertion cannot fail and proves nothing by itself.
+- **Lighthouse, finally run** — a v4.25 commitment that had been carried unmet. Measured against
+  the deployed v4.25 build, so these are the numbers this release inherits, not numbers it caused:
+
+  | | Mobile | Desktop | Target |
+  |---|---|---|---|
+  | Performance | **79** | 100 | ≥ 90 (mobile) |
+  | Accessibility | 100 | 100 | ≥ 95 |
+  | Best Practices | 100 | 100 | — |
+  | SEO | 100 | 100 | ≥ 95 |
+
+  Accessibility and SEO clear their targets with room to spare, and CLS is a flat **0** on both —
+  the explicit image dimensions are doing their job. **Mobile Performance misses at 79** and is
+  recorded as an open item rather than quietly dropped. The causes are structural, not incidental:
+  102 KiB of unused JavaScript and ~880 ms of render-blocking requests, because `app.js` is a
+  single 191 KB unminified file loaded up front and `styles.css` is a single unminified sheet. Both
+  follow directly from this project having no build system, which is a deliberate architectural
+  choice, so closing the gap is a scoped decision about tooling — not a fix that belongs in a
+  bug-fix release. Desktop already scores 100.
+
 ## v4.25 — 2026-09-02
 
 SpikeSheet gets a homepage. Until now the app opened on a bare match-configuration form: ~282 words of visible text, every one of them a UI label. Nothing on the page said what SpikeSheet is, who it is for, or why it beats a paper scoresheet — which made it a poor landing page for anyone arriving from a search result, a forum post, or an AI recommendation.

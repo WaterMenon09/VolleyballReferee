@@ -2255,9 +2255,18 @@ textarea:focus-visible,
     letter-spacing: 0.03em;
     text-transform: uppercase;
     color: var(--ink-85);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* v4.26: wraps rather than truncates. This 1fr track is capped at roughly
+       (container - digits - gaps) / 2 and does NOT grow with viewport width — 99px @400,
+       82px @375 — so an ellipsis clipped any name past ~12 characters at every size.
+       `anywhere`, not `break-word` — the reason is intrinsic sizing, NOT line breaking. Both
+       values break an otherwise-unbreakable word; only `anywhere` folds those break
+       opportunities into min-content. This is a flex item with `min-width: auto`, so under
+       `break-word` its min-content would stay at the longest word ("SCHWEIDEN" alone overruns
+       the ~82px track at 375px) and it would refuse to shrink, spilling its grid track.
+       text-align is already centre by inheritance — do not re-declare it. The grid's two 1fr
+       tracks stay equal because .ft-team carries min-width: 0, so the digits never shift. */
+    overflow-wrap: anywhere;
+    text-wrap: balance;
 }
 
 .ft-sets {
@@ -2392,9 +2401,11 @@ textarea:focus-visible,
 .box-score td.box-score-name {
     font: 600 0.95rem/1.2 var(--font-body);
     color: var(--ink-85);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* v4.26: wraps, matching .ft-name and .story-card-detail. A table row's cells share a
+       height, so a wrapped name CANNOT ragged the numeric columns — they stay aligned. No
+       text-wrap: balance here; this is a table cell, not a display line. The ≤480px block
+       below pins the column width — read the note there before touching either. */
+    overflow-wrap: anywhere;
 }
 
 .box-score-dot {
@@ -2416,16 +2427,24 @@ textarea:focus-visible,
     }
     .box-score-wrap::-webkit-scrollbar { display: none; }
     .box-score { min-width: 100%; }
-    /* `max-width: 9ch` on the CELL gave the NAME only ~3 characters: the dot (10px) + its
-       margin (8px) + two lots of --sp-3 padding (24px) ate 42px of the 9ch budget, so
-       "Thunderbolts VC" and "Thunder Hawks" both rendered as "Thu…". Shrink this cell's
-       side padding to --sp-1 and size the cell to 9ch PLUS the overhead, so 9ch is what the
-       text actually gets. Overhead = dot 10px + margin 8px + 2 × --sp-1 (8px) = 26px.
-       In the 5-set + long-name worst case the panel may now scroll horizontally — that is
+    /* The name column is sized to 9ch of TEXT plus its overhead, so 9ch is what the text
+       actually gets: dot 10px + margin 8px + 2 × --sp-1 (8px) = 26px. Side padding is
+       shrunk to --sp-1 to buy that room back. Since v4.26 the cell wraps instead of
+       ellipsising, so 9ch sets the wrap width rather than the truncation point.
+
+       min-width is LOAD-BEARING — do not delete it as a duplicate of max-width. Wrapping
+       reduces the cell's min-content contribution, and min-content is what reserves a column
+       in auto table layout. Without the pin the name column COLLAPSES in the 5-set case
+       (375px: 105px → 63px, rows 89px tall). `overflow-wrap: break-word` does not avoid this
+       either — it leaves min-content at the longest word, still only 76px — so the pin is
+       required whichever wrap mode is used. Pinned, rows grow just 44px → 52px.
+
+       In the 5-set + long-name worst case the panel may scroll horizontally — that is
        explicitly allowed (panel, never the page) and the edge-fade mask above signals it. */
     .box-score td.box-score-name {
         padding-left: var(--sp-1);
         padding-right: var(--sp-1);
+        min-width: calc(9ch + 26px);
         max-width: calc(9ch + 26px);
     }
     .box-score th:not(.box-score-name),
@@ -2868,9 +2887,10 @@ textarea:focus-visible,
     font-weight: 600;
     font-size: 0.92rem;
     color: var(--ink-85);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* v4.26: wraps, same as .ft-name and .box-score-name. This is a flex row, not a table, so
+       nothing needs pinning — `anywhere` drops min-content to ~1 character and the two names
+       split the row evenly. The ellipsis was worst here: 320px left each name just 81px. */
+    overflow-wrap: anywhere;
 }
 
 .history-team-name:last-child { text-align: right; }
