@@ -8,3 +8,8 @@ docs/
 # the generator page and raw captures to GitHub Pages.
 _*.html
 _*.png
+
+# Local git worktrees. A worktree created inside the repo gets committed as an orphaned
+# gitlink (mode 160000) with no .gitmodules entry, which makes actions/checkout fail its
+# post-job cleanup with "No url found for submodule path" on every single deploy.
+.worktrees/
