@@ -4,13 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development
 
-No build system or dependencies. To run the app, open `index.html` directly in a browser:
+No build system or dependencies **for development**. To run the app, open `index.html` directly in
+a browser:
 
 ```bash
 open index.html
 ```
 
-Deployment is automated via GitHub Actions (`.github/workflows/deploy.yml`) — any push to `main` deploys to GitHub Pages.
+Deployment is automated via GitHub Actions (`.github/workflows/deploy.yml`) — any push to `main`
+deploys to GitHub Pages.
+
+### The deploy minifies; the repo does not (v4.27)
+
+**`app.js` and `styles.css` are minified in CI, in the runner's checkout only.** Nothing is
+committed, no dependency enters local dev, and `open index.html` still works from plain readable
+source. Only the bytes GitHub Pages serves are minified — 196→94 KB and 124→70 KB, 41.6 KB off
+gzipped. This exists because mobile Lighthouse Performance was 79 against a ≥90 target, with
+102 KiB of unused JS and ~880 ms of render-blocking as the top drivers.
+
+**Do not "simplify" this into a committed build output or a repo-level toolchain.** Minifying at
+deploy time is the whole point: it buys the bytes without paying the maintenance cost that
+[[Vanilla JS No Framework]] was decided to avoid.
+
+**Maintenance traps:**
+
+- **esbuild is PINNED** (`0.28.2`). `@latest` on a job that publishes to the live site is both
+  non-deterministic and a supply-chain foothold. Bump it deliberately, and re-run the app against
+  minified output when you do.
+- **`npx --yes` caches into `~/.npm`, not the working directory.** That matters: the deploy ships
+  `path: '.'`, so anything that creates a `node_modules/` in the checkout would publish it. Never
+  replace this with a plain `npm install` in the repo root.
+- **The `Verify minified output` step is a release gate, not decoration.** `app.js` is a plain
+  script, so its top-level declarations *are* the globals, and `index.html`'s stale-cache fallback
+  probes exactly two of them **by name** (`window.showScreen`, `window.startMatch`). If a future
+  esbuild flag ever mangled those, the file would still parse and the app would silently
+  misbehave — which is precisely the failure `node --check` alone cannot catch. The step also
+  asserts `prefers-reduced-motion` is still the last rule in the stylesheet.
+- **The minify step is a hardcoded filename list, not a glob.** It names `app.js` and
+  `styles.css` and nothing else, and the verify gate likewise asserts properties of those two
+  known outputs — so **neither can detect a new asset that should have been minified and wasn't.**
+  Any future deployed `.js`/`.css` file (the SEO plan's `guides/*.html` pages are the concrete
+  case on the horizon) must be added to **both** that step and `APP_SHELL` in `sw.js`, or it ships
+  unminified and unavailable offline.
+- **`index.html` and `sw.js` are deliberately NOT minified.** `index.html` carries inline scripts
+  (the entry gate, the stale-cache net) where the risk outweighs a few hundred bytes; `sw.js` is
+  ~2.5 KB and cache-busts everything else, so minifying it buys nothing.
+- **A change to what the deploy emits still needs the `sw.js` VERSION bump**, even when no source
+  file changed — `app.js` and `styles.css` are cache-first, so without it returning clients keep
+  the previous bytes and never receive the improvement.
 
 ## Naming: the app is SpikeSheet, the repo is VolleyballReferee (v4.23)
 

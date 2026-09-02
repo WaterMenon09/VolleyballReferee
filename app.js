@@ -117,7 +117,7 @@ const STORAGE_SCHEMA = 4;
 const HISTORY_KEY = 'vb-match-history';
 const HISTORY_MAX = 50;
 
-const APP_VERSION = 'v4.26';
+const APP_VERSION = 'v4.27';
 
 // ── Changelog (homepage "What's New" modal) ────────────────────────────────
 // User-facing rewrite of CHANGELOG.md, not a copy of it — the file is developer-toned (internal
@@ -125,6 +125,13 @@ const APP_VERSION = 'v4.26';
 // fetch('./CHANGELOG.md'): fetching would need the raw file added to sw.js's APP_SHELL to work
 // offline, for text nobody but a developer would want to read anyway.
 const CHANGELOG_ENTRIES = [
+    {
+        version: 'v4.27',
+        date: 'Sep 2, 2026',
+        changes: [
+            'SpikeSheet now loads about 40 KB lighter, so it opens faster on a phone and on a weak connection at the side of a court. Nothing about how it works has changed.'
+        ]
+    },
     {
         version: 'v4.26',
         date: 'Sep 2, 2026',

@@ -48,10 +48,63 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v6
 
-      # v5 pulls in upload-artifact@v7. Note upload-pages-artifact@v4 stopped including
-      # dotfiles in the artifact: that is fine here and mildly desirable — nothing the site
-      # serves is a dotfile, and it stops `.gitignore` being published. If a dotfile ever is
-      # needed (a `.well-known/` path, say), this action takes `include-hidden-files`.
+      # Minify ONLY the deployed artifact. The repo deliberately has no build system --
+      # `open index.html` must keep working from plain source, and no dependency may enter
+      # local dev -- so this rewrites app.js/styles.css in the runner's checkout and commits
+      # nothing. Source stays readable; only the bytes GitHub Pages serves are minified.
+      # Measured on v4.26: app.js 196->94 KB, styles.css 124->70 KB (41.6 KB off gzipped).
+      #
+      # esbuild is PINNED. `@latest` in CI is both non-deterministic and a supply-chain
+      # foothold on a job that can publish to the live site.
+      #
+      # `npx --yes` caches into ~/.npm, NOT the working directory -- important, because
+      # `upload-pages-artifact` ships `path: '.'`, so a node_modules/ here would be published.
+      - name: Minify deployed assets
+        run: |
+          npx --yes esbuild@0.28.2 app.js     --minify --allow-overwrite --outfile=app.js
+          npx --yes esbuild@0.28.2 styles.css --minify --allow-overwrite --outfile=styles.css
+
+      # Fail the deploy rather than publish a broken bundle. Three separate things are
+      # checked, and each catches a failure the others cannot:
+      #
+      #  1. SIZE. Everything below would pass byte-for-byte against the UNMINIFIED source, so
+      #     without this the gate proves the output is *valid* but never that it is *minified*.
+      #     A minify step that silently no-ops would then ship 196 KB again, permanently, behind
+      #     a VERSION bump telling every returning client to re-download it — green deploy, and
+      #     the only symptom is a Lighthouse score nobody re-measures. Ceilings sit between the
+      #     minified size and the source size (94/196 KB and 70/124 KB) with room to grow.
+      #  2. GLOBALS. app.js is a plain script, so its top-level declarations ARE the globals,
+      #     and index.html's stale-cache fallback probes two of them BY NAME
+      #     (`window.showScreen`, `window.startMatch`). esbuild does not rename them today, but
+      #     a future flag or version could — and the file would still parse, so `node --check`
+      #     alone cannot catch it. The app would just silently misbehave.
+      #  3. RULE ORDER. `prefers-reduced-motion` must stay the LAST rule in styles.css.
+      #     Brace-match to the block's real end and require EOF after it. Do not weaken this to
+      #     a `tail -c N | grep` distance check: that has margin of only ~70 bytes, so a routine
+      #     edit inside the block false-FAILS with a message that is untrue, and any short rule
+      #     appended after the block false-PASSES while the invariant is actually broken.
+      - name: Verify minified output
+        run: |
+          for f in app.js:130000 styles.css:95000; do
+            n="${f%:*}"; max="${f#*:}"; got=$(wc -c < "$n")
+            [ "$got" -lt "$max" ] || { echo "::error::$n looks unminified: $got bytes (expected < $max)"; exit 1; }
+          done
+
+          node --check app.js
+          for id in showScreen startMatch trackScreen renderFinalScore endMatch; do
+            grep -q "function $id" app.js || { echo "::error::minify dropped global: $id"; exit 1; }
+          done
+
+          node -e 'const s=require("fs").readFileSync("styles.css","utf8");
+            const i=s.lastIndexOf("prefers-reduced-motion");
+            if(i<0){console.log("::error::prefers-reduced-motion block is gone from styles.css");process.exit(1)}
+            let j=s.indexOf("{",i),d=0;
+            for(;j<s.length;j++){if(s[j]==="{")d++;else if(s[j]==="}"&&--d===0){j++;break}}
+            const r=s.slice(j).trim();
+            if(r){console.log("::error::prefers-reduced-motion is no longer the LAST rule in styles.css; "+r.length+" bytes follow it");process.exit(1)}'
+
+          echo "minified: app.js $(wc -c < app.js) B, styles.css $(wc -c < styles.css) B"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:

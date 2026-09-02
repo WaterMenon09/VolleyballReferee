@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.27 — 2026-09-02
+
+Closes the one target the v4.25/v4.26 work left unmet. Lighthouse mobile Performance measured **79** against a ≥90 goal (Accessibility, Best Practices and SEO were all 100, and CLS a flat 0), with 102 KiB of unused JavaScript and ~880 ms of render-blocking requests as the top two drivers. Both trace to a single unminified `app.js` and a single unminified `styles.css`, which in turn trace to this project deliberately having no build system.
+
+### Changed
+- **`app.js` and `styles.css` are now minified in CI, for the deployed artifact only.** `app.js` 196 → 94 KB and `styles.css` 124 → 70 KB — **41.6 KB off the wire gzipped** (53.1 → 25.4 KB and 27.3 → 13.5 KB respectively), a little over half of each file.
+
+  This was picked over three alternatives, and the reason is architectural rather than numerical. Minifying at deploy time rewrites the runner's checkout and **commits nothing**: the repo stays plain readable source, `open index.html` still works, and no dependency enters local development. The larger single win on paper — splitting the hero demo widget out of `app.js` and lazy-loading it, roughly a third of the file — was **rejected**, because it costs an `APP_SHELL` entry in `sw.js`, which is exactly the trade-off the demo was inlined to avoid. Inlining critical CSS was deferred: it targets the bigger figure but risks a flash of unstyled content on the one page whose entire job is a first impression.
+
+### Internal
+- esbuild is **pinned** to `0.28.2`. `@latest` on a job with permission to publish to the live site is both non-deterministic and a supply-chain foothold.
+- Minification is invoked through `npx --yes`, which caches into `~/.npm` rather than the working directory. This is load-bearing: the deploy ships `path: '.'`, so a `node_modules/` in the checkout would be published.
+- A **`Verify minified output`** step gates the deploy. `app.js` is a plain script, so its top-level declarations *are* its globals, and `index.html`'s stale-cache fallback probes two of them by name (`window.showScreen`, `window.startMatch`). A future esbuild flag that mangled those would still produce a parseable file and a silently broken app, which `node --check` alone cannot catch — so the step asserts each required global by name, and that `prefers-reduced-motion` is still the last rule in the stylesheet. A deliberately mangled build was used to confirm the guard fails rather than passes.
+- `index.html` and `sw.js` are deliberately **not** minified: the former carries inline scripts (the entry gate, the stale-cache net) where the risk outweighs a few hundred bytes, and the latter is ~2.5 KB and is what cache-busts everything else.
+- `sw.js` `VERSION` → `v4.2.7`. Required even though no source file's behaviour changed: `app.js` and `styles.css` are served cache-first, so without the bump returning clients keep the old bytes and never receive the improvement.
+
+### Verification
+- The full app was exercised against minified assets before shipping: homepage renders with the hero, prose and self-playing demo intact; the hero CTA routes to setup; a match starts; the result screen renders with all five story cards, three set charts, wrapped long team names, aligned numeric columns and no truncation. Exactly one screen visible, one `<h1>`, `data-js` armed, all ten scroll-reveals correct, and **zero console errors**.
+- Guard verified in both directions — it passes real esbuild output and fails a build with a renamed global.
+
 ## v4.26 — 2026-09-02
 
 A bug fix release that clears the way for the SEO work. v4.25 shipped a homepage whose full-time
