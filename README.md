@@ -1,6 +1,8 @@
 # SpikeSheet
 
-A comprehensive web-based volleyball scoresheet application for tracking matches, rotations, substitutions, and more. Works seamlessly on desktop and mobile browsers.
+**A free volleyball scoreboard and scoresheet app that runs in your browser — offline, installable, no download and no sign-up.** Track scores, rotations, substitutions, the libero and timeouts under FIVB rules, on a phone at the side of the court or on a desktop.
+
+**[▶ Open SpikeSheet](https://watermenon09.github.io/VolleyballReferee/)**
 
 > Formerly released as "Volleyball Referee." The app was renamed in v4.23; the URL, your saved matches, and all settings are unchanged.
 

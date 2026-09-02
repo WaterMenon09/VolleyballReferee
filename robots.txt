@@ -1,0 +1,32 @@
+# SpikeSheet — https://watermenon09.github.io/VolleyballReferee/
+#
+# AI crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-Extended and friends) are
+# DELIBERATELY not blocked. Being crawled and cited by them is the point of this file
+# existing at all; a Disallow here would be working against the goal.
+#
+# THIS FILE IS CURRENTLY INERT. Read this before adding any directive to it.
+#
+# RFC 9309 fetches robots.txt from the /robots.txt path of the AUTHORITY (scheme, host,
+# port). The deploy ships `path: '.'` from the repo root and the site is served from the
+# /VolleyballReferee/ subpath, so this copy lands at /VolleyballReferee/robots.txt and is
+# never consulted for watermenon09.github.io. The origin root currently 404s, and per
+# RFC 9309 §2.3.1.3 an unavailable robots.txt means UNRESTRICTED — so crawlers already have
+# full access and the `Allow: /` below grants nothing that was withheld. The Sitemap line is
+# likewise never read; the sitemap is registered by submitting it in Search Console.
+#
+# Google confirms this from its own side: with the property verified, Search Console reports
+# robots.txt and Crawl stats as "only available in root-level properties", and even the
+# Search-generative-AI control as "inherit from: watermenon09.github.io".
+#
+# THE FIX IS NOT TO MOVE THIS FILE, AND IT IS NOT TO MOVE THE ORIGIN. Claiming the separate
+# `watermenon09.github.io` user-site repo would serve the host root while this project site
+# keeps its /VolleyballReferee/ subpath — GitHub Pages is built for that coexistence, and the
+# real robots.txt would live in THAT repo, not here. Nothing about this file relocates.
+#
+# It is kept because it costs nothing, documents the situation where someone will look for
+# it, and is correct on its face if the path ever becomes authoritative.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://watermenon09.github.io/VolleyballReferee/sitemap.xml

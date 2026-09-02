@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Absolute URLs, and they keep /VolleyballReferee/ on purpose: the app was renamed to
+     SpikeSheet in v4.23 but the repo and Pages URL deliberately did not move.
+     lastmod is maintained by hand — update it in the same release that changes the page,
+     or drop it. A lastmod that lies is worse than no lastmod. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://watermenon09.github.io/VolleyballReferee/</loc>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+</urlset>

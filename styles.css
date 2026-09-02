@@ -3490,6 +3490,56 @@ body[data-screen="home"] .container { display: none; }
 }
 .home-demo-cap { color: var(--ink-45); margin-bottom: var(--sp-3); }
 
+/* Reserve the demo widget's height. #homeDemoRoot is EMPTY in the markup — homeDemo.init()
+   builds the whole widget into it — so without this every band below it is pushed down once
+   app.js runs. Measured with Lighthouse 12 at --throttling-method=devtools (NEVER the default
+   `simulate`, which reports this shift as 0.002 and shows a false pass), paired runs on an
+   otherwise identical local build: CLS 0.1373 -> 0.0022, with section#homeFeatures going from
+   0.1364 to absent from the layout-shifts audit. Same bug class as the img at index.html:278.
+
+   Measured .demo-widget heights over HTTP with all six faces loaded. The middle column is the
+   widget's CONTENT box — the box the container query below keys on, so it is the one worth
+   tabulating: content = viewport - 58, being 32 rail padding + 24 widget padding + 2 border.
+   (Do not mix this with the border box, viewport - 32; an earlier draft of this table did, and
+   reading 375 -> 343 as content puts the container-query flip 26px off, at viewport 393.)
+   Height plateaus at 371 from viewport 525 upward, and the widget's own max-width: 700px and
+   the 1024px full-bleed rule change none of it.
+       320 -> 262 -> 338     415 -> 357 -> 352     440 -> 382 -> 365
+       375 -> 317 -> 346     419 -> 361 -> 361     480 -> 422 -> 368
+       412 -> 354 -> 351     420 -> 362 -> 361     540 -> 482 -> 371
+
+   TWO separate things drive that curve, and the second is the reason for the breakpoint:
+     - .demo-score is clamp(2rem, 15cqw, 3.6rem) and .demo-teamname is
+       clamp(0.66rem, 3.1cqw, 0.9rem) with min-height: 2.2em — CONTAINER units, so they track
+       the widget's own inline size, topping out at 384 and ~465px of content width.
+     - the +9px step between 415 and 419 is `@container (max-width: 360px)` further down this
+       file releasing .demo-panel's vertical padding from --sp-3 back to --sp-4.
+
+   THE BREAKPOINT IS 419px AND THAT IS NOT AN OFF-BY-ONE — it is derived. The container query
+   keys on .demo-widget's CONTENT box, so it stops matching at content 361px, and
+   361 + (--sp-3 * 2 padding) + (1px border * 2) + (--sp-4 * 2 rail padding) = 361+24+2+32 = 419.
+   A 420px breakpoint under-reserves by 9px at exactly 419 — invisible to Lighthouse, whose
+   mobile emulation is 412px wide, and reachable at desktop browser zoom — a 524px window at
+   125% lays out at 419. (Chrome integer-snaps the layout viewport, so the sub-pixel window
+   between 418 and 419 is unreachable there; `(width > 418px)` would close it if another engine
+   ever lays out a fractional top-level viewport.)
+   If --sp-3, --sp-4, the border, or that 360px container query changes, redo this arithmetic.
+
+   min-height and deliberately NOT aspect-ratio: width swings far more than height, so the ratio
+   runs 0.85 (at a 320px viewport) to 3.14 (at 1280) and no single ratio fits. Each band is
+   pinned to the tallest measurement it covers, so the reservation never under-reserves.
+
+   Two known, accepted limitations — both fail SAFE (dead space, never a shift):
+     - These are px against partly-rem content. At the 16px default root the table above holds;
+       a user at a 20px root font gets 2-23px of residual shift. Neither pure px nor pure rem
+       tracks it, because ~320px of the height is px-token structure and only the type scales.
+     - If app.js never runs (JS off, or the third branch of index.html's stale-cache net), the
+       reservation is a blank 353/372px box under the "Live — deciding set" caption. Gating it on
+       html[data-js] would reintroduce the shift, since the attribute and the widget land in the
+       same task, so the blank box is the better trade. */
+#homeDemoRoot { min-height: 353px; }
+@media (min-width: 419px) { #homeDemoRoot { min-height: 372px; } }
+
 @media (min-width: 1024px) {
     .home-demo-rail {
         max-width: none;
@@ -3999,6 +4049,13 @@ body[data-screen="home"] .credits {
 
 .demo-controls {
   margin-top: var(--sp-1);
+  /* Pinned to the toggle's own 44px so the widget's height does NOT depend on whether the
+     toggle is showing. Under prefers-reduced-motion app.js sets els.toggle.hidden = true
+     (app.js:1717), which collapsed this row to 0 and made the widget 44px shorter — measured
+     346 -> 302 at 375px wide. That left #homeDemoRoot's reservation over-reserving by ~50px
+     for exactly the users least well served by a large dead gap. Keeping the row means the
+     measured height table above applies to reduced motion too, unchanged. */
+  min-height: 44px;
 }
 
 .demo-toggle {

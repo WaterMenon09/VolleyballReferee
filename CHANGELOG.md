@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [calendar-incremented semantic versioning](#versioning):
 each change merged to `main` increments the patch version by `0.01`.
 
+## v4.28 — 2026-09-02
+
+The first repo-side release of the search-and-AI discoverability work, plus the layout-shift bug that work uncovered. Auditing what the plan still needed turned up that most of its on-page phase had already shipped in v4.25 — title, meta description, canonical, JSON-LD and the social card were all live, and the UTM attribution fix landed with them. What was actually missing was the crawler plumbing, and one genuine bug nobody had scheduled.
+
+### Fixed
+- **The homepage no longer jumps as it loads.** `#homeDemoRoot` was an empty `<div>` with no reserved height, and `homeDemo.init()` builds the ~340–370 px hero widget into it — so `section#homeFeatures` and every band below it were pushed down the moment `app.js` ran. Measured CLS was **0.1373** against the 0.1 "good" threshold, of which `#homeFeatures` alone accounted for **0.1364**. Reserving the box with `min-height` takes CLS to **0.0022** and `#homeFeatures` out of the layout-shift audit entirely.
+
+  The CLS delta is the attributable number and the only one claimed here. Both figures come from paired local runs against a `python3 -m http.server` copy, with the reservation removed and restored on an otherwise identical build; the Performance score moved 87 → 92 across that pair, but deployed v4.27 already measured 92 *with the bug present*, so that is a property of the local harness rather than a win this release delivers. An earlier run against deployed v4.27 put the same shift at 0.160 / 0.1587 — same bug, different environment, and the reason the rule's own comment cites the local pair instead.
+
+  This is the same bug class already documented for `icons/result-screen.webp` in the comment at `index.html:278` — a JS- or network-populated box with no reserved space. It survived this long because **Lighthouse's default `simulate` mode reports this shift as 0.002**, so every default-mode run showed a false pass.
+
+  `min-height` and deliberately **not** `aspect-ratio`: the widget's width swings far more than its height, so the ratio runs 0.85 at a 320 px viewport to 3.14 at 1280 px and no single ratio fits. The height is also a curve rather than a constant — `.demo-score` is `clamp(2rem, 15cqw, 3.6rem)` and `.demo-teamname` is `clamp(0.66rem, 3.1cqw, 0.9rem)` with `min-height: 2.2em`, container units that track the widget's own inline size and top out at 384 px and ~465 px of content width respectively. Two steps, each pinned to the tallest measurement it covers; the measured table lives in the rule's comment.
+
+  **The breakpoint is 419 px, and it is derived rather than eyeballed.** A first cut used 420 px and under-reserved by 9 px at exactly 419 — a real residual shift, invisible to Lighthouse (whose mobile emulation is 412 px wide) and reachable in the wild through browser zoom. The step at that width is not the clamps at all: it is `@container (max-width: 360px)` releasing `.demo-panel`'s vertical padding. Container queries key on the widget's **content** box, so the query stops matching at content 361 px, and 361 + 24 (padding) + 2 (border) + 32 (rail padding) = **419**. If any of those tokens or that container query change, the arithmetic has to be redone.
+
+- **`.demo-controls` now reserves its own 44 px.** Under `prefers-reduced-motion` the play/pause toggle is hidden (`app.js:1717`), which collapsed that row and made the whole widget 44 px shorter — measured 346 → 302 at 375 px wide. The reservation above would then over-reserve by ~50 px for precisely the users least well served by a large dead gap. Pinning the row makes the widget's height independent of the toggle, so one measured table now covers both motion preferences.
+
+### Added
+- **`robots.txt`** — allow-all with a `Sitemap:` line. `GPTBot`, `ClaudeBot` and `PerplexityBot` are **deliberately not blocked**: being crawled and cited by AI answer engines is the goal, not a side effect.
+- **`sitemap.xml`** — the canonical URL, with a hand-maintained `lastmod`.
+
+  **`robots.txt` is currently inert, and that is worth stating plainly rather than discovering later.** Per RFC 9309 a crawler fetches `/robots.txt` from the *authority* — scheme, host and port — so a file at `/VolleyballReferee/robots.txt` is never consulted for `watermenon09.github.io`. The deploy ships `path: '.'` from the repo root and the site is served from that subpath, so the subpath is the only place it can land. The origin root 404s because the `watermenon09.github.io` user-site repo is unclaimed — and per RFC 9309 §2.3.1.3 an unavailable robots.txt means **unrestricted**, so crawlers already have full access and `Allow: /` grants nothing that was being withheld. Google confirms it from its own side: with the property verified, Search Console reports `robots.txt` and Crawl stats as "only available in root-level properties", and even the Search-generative-AI control as "inherit from: watermenon09.github.io".
+
+  Two things this does **not** mean. It is not a reason to move the origin — that stays fixed, and moving it would wipe every `vb-*` localStorage key and orphan every installed PWA. And claiming the user-site repo would **not** relocate this file: that repo would serve the host root while this project site keeps its `/VolleyballReferee/` subpath (GitHub Pages is built for exactly that coexistence: a user site serves the host root, a project site serves its own subpath, and the two are independent). The authoritative robots.txt would live in *that* repo, not here. This file is kept because it costs nothing and documents the situation where someone will go looking for it — but it steers no crawler today, and no directive should be added expecting otherwise.
+
+  **`sitemap.xml` does not share that problem.** A sitemap constrains only which URLs it may list — one at `/VolleyballReferee/sitemap.xml` legitimately covers everything under `/VolleyballReferee/`, which is the entire site — and Search Console accepts it by direct submission for a URL-prefix property. It is fully functional where `robots.txt` is not; submitting it in the Search Console UI is what registers it, since the inert `Sitemap:` line cannot.
+
+### Changed
+- **README opens with the category terms it was missing.** The old first sentence — "a comprehensive web-based volleyball scoresheet application" — carried none of *free*, *scoreboard*, *offline* or *no sign-up*, which are the words people actually search. A `▶ Open SpikeSheet` link now sits in the first five lines rather than nine lines down under its own heading.
+
+### Internal
+- `sw.js` `VERSION` → `v4.2.8`. Required: `styles.css` is served cache-first, so without the bump returning clients keep the pre-fix stylesheet and never receive the layout-shift fix.
+- `CHANGELOG_ENTRIES` **does** get an entry, for the layout-shift fix only. The crawler files are invisible to a referee and the README is not app surface, so an earlier draft skipped the array entirely — on the stated grounds that the panel "does not cover" the homepage. That reason was simply false: `renderHomeWhatsNew()` (`app.js:1467`) renders `CHANGELOG_ENTRIES.slice(0, 3)` into `#homeWhatsNew` **on the homepage itself**, so skipping it would have left the welcome page advertising v4.27 as newest beside a footer reading v4.28. Precedent agrees — v4.27 was a pure load-time change and got an entry.
+
 ## v4.27 — 2026-09-02
 
 Closes the one target the v4.25/v4.26 work left unmet. Lighthouse mobile Performance measured **79** against a ≥90 goal (Accessibility, Best Practices and SEO were all 100, and CLS a flat 0), with 102 KiB of unused JavaScript and ~880 ms of render-blocking requests as the top two drivers. Both trace to a single unminified `app.js` and a single unminified `styles.css`, which in turn trace to this project deliberately having no build system.
